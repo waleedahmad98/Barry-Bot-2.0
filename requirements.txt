@@ -1,0 +1,6 @@
+discord.py>=2.3.0
+qbittorrentapi>=2023.9.57
+plexapi>=4.15.0
+feedparser>=6.0.10
+aiohttp>=3.9.0
+PyYAML>=6.0.1
