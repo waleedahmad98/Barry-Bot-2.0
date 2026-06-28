@@ -49,8 +49,27 @@ class MediaBot(commands.Bot):
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.send(f'Missing argument: `{error.param.name}`')
             return
+        if isinstance(error, commands.CommandInvokeError):
+            inner = error.original
+            if isinstance(inner, discord.Forbidden):
+                log.error(
+                    f'Missing permissions in #{ctx.channel} '
+                    f'(guild={ctx.guild}): {inner}'
+                )
+                # Try a plain-text reply; if that also fails, just log it
+                try:
+                    await ctx.send(
+                        'Missing permissions. Make sure the bot has '
+                        '**Send Messages** and **Embed Links** in this channel.'
+                    )
+                except discord.Forbidden:
+                    pass
+                return
         log.error(f'Error in {ctx.command}: {error}', exc_info=error)
-        await ctx.send(f'Error: {error}')
+        try:
+            await ctx.send(f'Error: {error}')
+        except discord.Forbidden:
+            log.error(f'Also cannot send error message to #{ctx.channel}')
 
 
 async def main():

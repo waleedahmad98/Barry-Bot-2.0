@@ -239,7 +239,16 @@ class Torrents(commands.Cog):
         if len(torrents) > 13:
             embed.set_footer(text=f'Showing 13 of {len(torrents)}')
 
-        await ctx.send(embed=embed)
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            # Embed Links permission missing — fall back to plain text
+            lines = [f'**Downloads — {len(active)} active, {len(done)} done**']
+            for t in active[:8]:
+                lines.append(f'`{progress_bar(t.progress)}` {truncate(t.name, 50)} — {format_state(t.state)}')
+            for t in done[:5]:
+                lines.append(f'Done: {truncate(t.name, 50)}')
+            await ctx.send('\n'.join(lines))
 
     @commands.hybrid_command(
         name='dl_remove', description='Remove a download (partial name match)'

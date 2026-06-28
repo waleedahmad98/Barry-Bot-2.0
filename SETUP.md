@@ -207,6 +207,19 @@ allowed_users:
 | `!movies [query]` | List all movies, or search by title |
 | `!shows [query]` | List all TV shows, or search by title |
 | `!recent` | Show recently added media |
+| `!delete <title> [movies\|shows]` | Delete a movie or show from Plex and disk |
+
+**Delete example:**
+```
+!delete "Breaking Bad" shows
+!delete "The Matrix" movies
+```
+
+The bot will show exactly which files/folders will be removed and ask for confirmation before doing anything. On confirm it deletes the files from disk and removes the entry from Plex.
+
+- **Shows** — deletes the entire show folder (all seasons included)
+- **Movies** — deletes the video file(s) and the movie's folder if it becomes empty
+- If the title matches more than one result the bot will list them and ask you to be more specific
 
 ### RSS Auto-Download
 
