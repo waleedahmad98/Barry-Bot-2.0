@@ -1,4 +1,4 @@
-# Media Bot — Setup & Usage
+# Media Bot (Base for Barry Bot) — Setup & Usage
 
 A Discord bot for managing torrents, Plex, and RSS downloads from your phone.
 
