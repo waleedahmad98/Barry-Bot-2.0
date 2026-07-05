@@ -46,7 +46,12 @@ class QBitClient:
             kwargs['save_path'] = save_path
         try:
             result = await asyncio.to_thread(self._client.torrents_add, **kwargs)
-            return result == 'Ok.'
+            # Older qBittorrent WebUI versions return the plain text 'Ok.'/'Fails.'
+            # Newer versions (API v2.14+) return a JSON metadata object on success instead,
+            # with failures raised as exceptions rather than returned as text.
+            if isinstance(result, str):
+                return result == 'Ok.'
+            return True
         except Exception as exc:
             log.error(f'Failed to add torrent: {exc}')
             return False
