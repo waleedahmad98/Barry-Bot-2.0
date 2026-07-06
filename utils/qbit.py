@@ -40,7 +40,10 @@ class QBitClient:
             log.warning(f'qBittorrent connection failed: {exc}')
             return False
 
-    async def add_torrent(self, url: str, save_path: Optional[str] = None) -> bool:
+    async def add_torrent(
+        self, url: str, save_path: Optional[str] = None
+    ) -> tuple[bool, Optional[str]]:
+        """Returns (success, error_message)."""
         kwargs: dict = {'urls': url}
         if save_path:
             kwargs['save_path'] = save_path
@@ -50,11 +53,15 @@ class QBitClient:
             # Newer versions (API v2.14+) return a JSON metadata object on success instead,
             # with failures raised as exceptions rather than returned as text.
             if isinstance(result, str):
-                return result == 'Ok.'
-            return True
+                text = result.strip()
+                return (text == 'Ok.', None if text == 'Ok.' else f'qBittorrent replied: {text!r}')
+            return True, None
+        except qbittorrentapi.Conflict409Error:
+            # Torrent is already present in qBittorrent (e.g. already added / still downloading).
+            return True, 'Already in qBittorrent'
         except Exception as exc:
             log.error(f'Failed to add torrent: {exc}')
-            return False
+            return False, str(exc)
 
     async def list_torrents(self, status_filter: str = 'all') -> list[TorrentInfo]:
         torrents = await asyncio.to_thread(

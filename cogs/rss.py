@@ -122,7 +122,7 @@ class RSS(commands.Cog):
             if not url:
                 continue
 
-            success = await qbit.add_torrent(url, save_path=save_path)
+            success, _reason = await qbit.add_torrent(url, save_path=save_path)
             if success:
                 log.info(f'RSS auto-downloaded: {title}')
                 downloaded.append(title)
