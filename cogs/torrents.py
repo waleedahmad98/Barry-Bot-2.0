@@ -41,10 +41,15 @@ class DownloadPathView(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(view=self)
 
-        success = await self.qbit.add_torrent(url, save_path=save_path)
+        success, reason = await self.qbit.add_torrent(url, save_path=save_path)
         color = discord.Color.green() if success else discord.Color.red()
         title = 'Download started' if success else 'Failed to add torrent'
-        desc = f'**{truncate(self.result.title, 200)}**\nSaving to: `{save_path}`' if success else None
+        if success:
+            desc = f'**{truncate(self.result.title, 200)}**\nSaving to: `{save_path}`'
+            if reason:
+                desc += f'\n_{reason}_'
+        else:
+            desc = f'`{reason}`' if reason else None
         await interaction.followup.send(embed=discord.Embed(title=title, description=desc, color=color))
 
 
@@ -191,9 +196,14 @@ class Torrents(commands.Cog):
         save_path = self.bot.config.get('paths', {}).get(category)
         await ctx.defer()
 
-        success = await qbit.add_torrent(url, save_path=save_path)
+        success, reason = await qbit.add_torrent(url, save_path=save_path)
         color = discord.Color.green() if success else discord.Color.red()
-        desc = f'Saving to: `{save_path or "qBittorrent default"}`' if success else None
+        if success:
+            desc = f'Saving to: `{save_path or "qBittorrent default"}`'
+            if reason:
+                desc += f'\n_{reason}_'
+        else:
+            desc = f'`{reason}`' if reason else None
         await ctx.send(
             embed=discord.Embed(
                 title='Download started' if success else 'Failed to add torrent',
