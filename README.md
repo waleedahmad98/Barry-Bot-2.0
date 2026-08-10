@@ -150,6 +150,16 @@ sonarr:
 
 Requests made through `/request_movie` and `/request_show` monitor the item and trigger an automatic search in Radarr/Sonarr — the bot doesn't touch qBittorrent directly for these; Radarr/Sonarr do that themselves using the indexer/download-client setup above. The bot's `/search` and `/download` commands remain a separate, manual path for one-off torrents that aren't a "monitor this permanently" request.
 
+#### Download/import notifications (optional)
+
+Barry Bot only posts a notification when a request is *placed* — it has no visibility into what happens in Radarr/Sonarr afterwards. To get a message when something actually finishes downloading and gets imported, use Radarr/Sonarr's **own** built-in Discord notifications (no bot config involved):
+
+1. In Discord, go to the channel you want notifications in → **Edit Channel → Integrations → Webhooks → New Webhook**. Copy its **Webhook URL**.
+2. In Radarr, go to **Settings → Connect → + → Discord**. Paste the webhook URL, give it a name, and under **Notification Triggers** enable at least **On Import** (and **On Grab** if you also want a "started downloading" ping from Radarr's side). Save.
+3. Repeat step 2 in Sonarr with its own **Settings → Connect → Discord** entry — Radarr and Sonarr each need this configured separately, and you can point them at the same webhook URL or different channels.
+
+These messages come from Radarr/Sonarr directly (their own username/avatar and formatting), separate from Barry Bot's own request/download notifications — that's expected, since it's Radarr/Sonarr reporting on their own work rather than the bot.
+
 ### Jellyfin (optional)
 
 Get an API key and your user ID:
