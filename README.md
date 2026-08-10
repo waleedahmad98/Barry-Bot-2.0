@@ -189,6 +189,8 @@ allowed_users:
 
 ## 7. Command Reference
 
+> **Privacy note:** When used as slash commands, all bot replies (search results, dropdowns, status messages, etc.) are private/ephemeral — only visible to the person who ran the command, so the channel doesn't get cluttered. The one exception: once a download is actually started, the bot posts a short public notification to the channel (e.g. "📥 @user started a download: **Title**") so everyone can see what's being grabbed. Prefix commands (`!search`, etc.) can't be made private — that's a Discord limitation — so use the slash-command versions (`/search`, `/download`, …) if you want private results.
+
 ### Torrents
 
 | Command | Description |

@@ -50,7 +50,17 @@ class DownloadPathView(discord.ui.View):
                 desc += f'\n_{reason}_'
         else:
             desc = f'`{reason}`' if reason else None
-        await interaction.followup.send(embed=discord.Embed(title=title, description=desc, color=color))
+        # Private confirmation, visible only to the requester.
+        await interaction.followup.send(
+            embed=discord.Embed(title=title, description=desc, color=color), ephemeral=True
+        )
+
+        # Public, notification-style heads-up for everyone else in the channel.
+        if success and interaction.channel is not None:
+            await interaction.channel.send(
+                f'📥 {interaction.user.mention} started a download: **{truncate(self.result.title, 200)}**',
+                allowed_mentions=discord.AllowedMentions(users=False),
+            )
 
 
 class SearchResultsView(discord.ui.View):
@@ -86,7 +96,7 @@ class SearchResultsView(discord.ui.View):
             color=discord.Color.blurple(),
         )
         await interaction.followup.send(
-            embed=embed, view=DownloadPathView(result, self.paths, self.qbit)
+            embed=embed, view=DownloadPathView(result, self.paths, self.qbit), ephemeral=True
         )
 
 
@@ -134,32 +144,33 @@ class Torrents(commands.Cog):
     @require_auth()
     async def search(self, ctx: commands.Context, query: str, category: str = 'all'):
         if category not in CATEGORIES:
-            await ctx.send(f'Category must be one of: {", ".join(CATEGORIES)}')
+            await ctx.send(f'Category must be one of: {", ".join(CATEGORIES)}', ephemeral=True)
             return
 
         jackett = self._build_jackett()
         if not jackett:
             await ctx.send(
                 'Torrent search is not configured. Set `indexer.api_key` in config.yaml.\n'
-                'You can still download directly with `!download <magnet/url>`.'
+                'You can still download directly with `!download <magnet/url>`.',
+                ephemeral=True,
             )
             return
 
         qbit = await self._build_qbit()
         if not qbit:
-            await ctx.send('qBittorrent is unavailable. Check config and that it is running.')
+            await ctx.send('qBittorrent is unavailable. Check config and that it is running.', ephemeral=True)
             return
 
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
 
         try:
             results = await jackett.search(query, category=category, limit=25)
         except Exception as exc:
-            await ctx.send(f'Search failed: {exc}')
+            await ctx.send(f'Search failed: {exc}', ephemeral=True)
             return
 
         if not results:
-            await ctx.send(f'No results for "{query}".')
+            await ctx.send(f'No results for "{query}".', ephemeral=True)
             return
 
         embed = discord.Embed(
@@ -177,7 +188,7 @@ class Torrents(commands.Cog):
             embed.set_footer(text=f'+{len(results) - 10} more in dropdown')
 
         view = SearchResultsView(results, self._download_paths(), qbit)
-        await ctx.send(embed=embed, view=view)
+        await ctx.send(embed=embed, view=view, ephemeral=True)
 
     @commands.hybrid_command(
         name='download', description='Download a torrent by magnet link or URL'
@@ -190,11 +201,11 @@ class Torrents(commands.Cog):
     async def download(self, ctx: commands.Context, url: str, category: str = 'downloads'):
         qbit = await self._build_qbit()
         if not qbit:
-            await ctx.send('qBittorrent is unavailable.')
+            await ctx.send('qBittorrent is unavailable.', ephemeral=True)
             return
 
         save_path = self.bot.config.get('paths', {}).get(category)
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
 
         success, reason = await qbit.add_torrent(url, save_path=save_path)
         color = discord.Color.green() if success else discord.Color.red()
@@ -204,27 +215,36 @@ class Torrents(commands.Cog):
                 desc += f'\n_{reason}_'
         else:
             desc = f'`{reason}`' if reason else None
+        # Private confirmation, visible only to the requester.
         await ctx.send(
             embed=discord.Embed(
                 title='Download started' if success else 'Failed to add torrent',
                 description=desc,
                 color=color,
-            )
+            ),
+            ephemeral=True,
         )
+
+        # Public, notification-style heads-up for everyone else in the channel.
+        if success and ctx.channel is not None:
+            await ctx.channel.send(
+                f'📥 {ctx.author.mention} started a download: **{truncate(url, 200)}**',
+                allowed_mentions=discord.AllowedMentions(users=False),
+            )
 
     @commands.hybrid_command(name='downloads', description='List current downloads')
     @require_auth()
     async def downloads(self, ctx: commands.Context):
         qbit = await self._build_qbit()
         if not qbit:
-            await ctx.send('qBittorrent is unavailable.')
+            await ctx.send('qBittorrent is unavailable.', ephemeral=True)
             return
 
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
         torrents = await qbit.list_torrents()
 
         if not torrents:
-            await ctx.send('No torrents in qBittorrent.')
+            await ctx.send('No torrents in qBittorrent.', ephemeral=True)
             return
 
         active = [t for t in torrents if t.progress < 1.0]
@@ -250,7 +270,7 @@ class Torrents(commands.Cog):
             embed.set_footer(text=f'Showing 13 of {len(torrents)}')
 
         try:
-            await ctx.send(embed=embed)
+            await ctx.send(embed=embed, ephemeral=True)
         except discord.Forbidden:
             # Embed Links permission missing — fall back to plain text
             lines = [f'**Downloads — {len(active)} active, {len(done)} done**']
@@ -258,7 +278,7 @@ class Torrents(commands.Cog):
                 lines.append(f'`{progress_bar(t.progress)}` {truncate(t.name, 50)} — {format_state(t.state)}')
             for t in done[:5]:
                 lines.append(f'Done: {truncate(t.name, 50)}')
-            await ctx.send('\n'.join(lines))
+            await ctx.send('\n'.join(lines), ephemeral=True)
 
     @commands.hybrid_command(
         name='dl_remove', description='Remove a download (partial name match)'
@@ -270,25 +290,25 @@ class Torrents(commands.Cog):
     ):
         qbit = await self._build_qbit()
         if not qbit:
-            await ctx.send('qBittorrent is unavailable.')
+            await ctx.send('qBittorrent is unavailable.', ephemeral=True)
             return
 
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
         torrents = await qbit.list_torrents()
         matches = [t for t in torrents if name.lower() in t.name.lower()]
 
         if not matches:
-            await ctx.send(f'No torrent matching "{name}".')
+            await ctx.send(f'No torrent matching "{name}".', ephemeral=True)
             return
         if len(matches) > 1:
             listing = '\n'.join(f'- {t.name}' for t in matches[:6])
-            await ctx.send(f'Multiple matches — be more specific:\n{listing}')
+            await ctx.send(f'Multiple matches — be more specific:\n{listing}', ephemeral=True)
             return
 
         t = matches[0]
         await qbit.remove(t.hash, delete_files=delete_files)
         suffix = ' (files deleted)' if delete_files else ''
-        await ctx.send(f'Removed **{t.name}**{suffix}.')
+        await ctx.send(f'Removed **{t.name}**{suffix}.', ephemeral=True)
 
     @commands.hybrid_command(name='dl_pause', description='Pause a download')
     @app_commands.describe(name='Partial torrent name')
@@ -305,25 +325,25 @@ class Torrents(commands.Cog):
     async def _toggle(self, ctx: commands.Context, name: str, pause: bool):
         qbit = await self._build_qbit()
         if not qbit:
-            await ctx.send('qBittorrent is unavailable.')
+            await ctx.send('qBittorrent is unavailable.', ephemeral=True)
             return
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
         torrents = await qbit.list_torrents()
         matches = [t for t in torrents if name.lower() in t.name.lower()]
         if not matches:
-            await ctx.send(f'No torrent matching "{name}".')
+            await ctx.send(f'No torrent matching "{name}".', ephemeral=True)
             return
         if len(matches) > 1:
             listing = '\n'.join(f'- {t.name}' for t in matches[:6])
-            await ctx.send(f'Multiple matches:\n{listing}')
+            await ctx.send(f'Multiple matches:\n{listing}', ephemeral=True)
             return
         t = matches[0]
         if pause:
             await qbit.pause(t.hash)
-            await ctx.send(f'Paused **{t.name}**.')
+            await ctx.send(f'Paused **{t.name}**.', ephemeral=True)
         else:
             await qbit.resume(t.hash)
-            await ctx.send(f'Resumed **{t.name}**.')
+            await ctx.send(f'Resumed **{t.name}**.', ephemeral=True)
 
 
 async def setup(bot: commands.Bot):

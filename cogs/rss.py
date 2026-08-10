@@ -194,14 +194,14 @@ class RSS(commands.Cog):
         if feed['keywords']:
             embed.add_field(name='Keywords', value=', '.join(feed['keywords']), inline=False)
         embed.add_field(name='URL', value=truncate(url, 100), inline=False)
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, ephemeral=True)
 
     @rss.command(name='list', description='List configured RSS feeds')
     @require_auth()
     async def rss_list(self, ctx: commands.Context):
         feeds = _load_feeds()
         if not feeds:
-            await ctx.send('No RSS feeds configured. Add one with `/rss add`.')
+            await ctx.send('No RSS feeds configured. Add one with `/rss add`.', ephemeral=True)
             return
 
         embed = discord.Embed(title=f'RSS Feeds ({len(feeds)})', color=discord.Color.blue())
@@ -217,7 +217,7 @@ class RSS(commands.Cog):
                 ),
                 inline=False,
             )
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, ephemeral=True)
 
     @rss.command(name='remove', description='Remove an RSS feed')
     @app_commands.describe(feed_id='Feed ID from /rss list')
@@ -226,22 +226,22 @@ class RSS(commands.Cog):
         feeds = _load_feeds()
         new_feeds = [f for f in feeds if f['id'] != feed_id]
         if len(new_feeds) == len(feeds):
-            await ctx.send(f'No feed with ID `{feed_id}`. Check `/rss list`.')
+            await ctx.send(f'No feed with ID `{feed_id}`. Check `/rss list`.', ephemeral=True)
             return
         _save_feeds(new_feeds)
-        await ctx.send(f'Removed feed `{feed_id}`.')
+        await ctx.send(f'Removed feed `{feed_id}`.', ephemeral=True)
 
     @rss.command(name='check', description='Manually trigger an RSS check right now')
     @require_auth()
     async def rss_check(self, ctx: commands.Context):
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
         feeds = _load_feeds()
         if not feeds:
-            await ctx.send('No feeds configured.')
+            await ctx.send('No feeds configured.', ephemeral=True)
             return
-        await ctx.send('Checking feeds…')
+        await ctx.send('Checking feeds…', ephemeral=True)
         await self.check_feeds()
-        await ctx.send('Done.')
+        await ctx.send('Done.', ephemeral=True)
 
 
 async def setup(bot: commands.Bot):

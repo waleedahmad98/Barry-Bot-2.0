@@ -27,7 +27,7 @@ class ConfirmDeleteView(discord.ui.View):
         try:
             deleted = await self.plex.delete_item(self.item)
         except Exception as exc:
-            await interaction.followup.send(f'Deletion failed: {exc}')
+            await interaction.followup.send(f'Deletion failed: {exc}', ephemeral=True)
             return
 
         if deleted:
@@ -43,7 +43,7 @@ class ConfirmDeleteView(discord.ui.View):
                 description='No files were found on disk (already deleted?).',
                 color=discord.Color.orange(),
             )
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -92,19 +92,19 @@ class Library(commands.Cog):
     async def movies(self, ctx: commands.Context, *, query: str = ''):
         plex = await self._build_plex()
         if not plex:
-            await ctx.send('Plex is not configured or unavailable. Set `plex.token` in config.yaml.')
+            await ctx.send('Plex is not configured or unavailable. Set `plex.token` in config.yaml.', ephemeral=True)
             return
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
         try:
             items = await plex.get_movies(query)
         except Exception as exc:
-            await ctx.send(f'Plex error: {exc}')
+            await ctx.send(f'Plex error: {exc}', ephemeral=True)
             return
         if not items:
-            await ctx.send('No movies found.')
+            await ctx.send('No movies found.', ephemeral=True)
             return
         label = f'Movies matching "{query}"' if query else 'Movies'
-        await ctx.send(embed=self._build_embed(f'{label} ({len(items)})', items))
+        await ctx.send(embed=self._build_embed(f'{label} ({len(items)})', items), ephemeral=True)
 
     @commands.hybrid_command(name='shows', description='List or search TV shows in Plex')
     @app_commands.describe(query='Title to search (leave blank for full list)')
@@ -112,19 +112,19 @@ class Library(commands.Cog):
     async def shows(self, ctx: commands.Context, *, query: str = ''):
         plex = await self._build_plex()
         if not plex:
-            await ctx.send('Plex is not configured or unavailable. Set `plex.token` in config.yaml.')
+            await ctx.send('Plex is not configured or unavailable. Set `plex.token` in config.yaml.', ephemeral=True)
             return
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
         try:
             items = await plex.get_shows(query)
         except Exception as exc:
-            await ctx.send(f'Plex error: {exc}')
+            await ctx.send(f'Plex error: {exc}', ephemeral=True)
             return
         if not items:
-            await ctx.send('No shows found.')
+            await ctx.send('No shows found.', ephemeral=True)
             return
         label = f'Shows matching "{query}"' if query else 'TV Shows'
-        await ctx.send(embed=self._build_embed(f'{label} ({len(items)})', items))
+        await ctx.send(embed=self._build_embed(f'{label} ({len(items)})', items), ephemeral=True)
 
     @commands.hybrid_command(name='delete', description='Delete a movie or show from Plex and disk')
     @app_commands.describe(
@@ -134,24 +134,24 @@ class Library(commands.Cog):
     @require_auth()
     async def delete(self, ctx: commands.Context, title: str, media_type: str = 'shows'):
         if media_type not in ('movies', 'shows'):
-            await ctx.send('`media_type` must be `movies` or `shows`.')
+            await ctx.send('`media_type` must be `movies` or `shows`.', ephemeral=True)
             return
 
         plex = await self._build_plex()
         if not plex:
-            await ctx.send('Plex is not configured or unavailable.')
+            await ctx.send('Plex is not configured or unavailable.', ephemeral=True)
             return
 
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
         plex_type = 'movie' if media_type == 'movies' else 'show'
         try:
             results = await plex.search_raw(title, plex_type)
         except Exception as exc:
-            await ctx.send(f'Plex error: {exc}')
+            await ctx.send(f'Plex error: {exc}', ephemeral=True)
             return
 
         if not results:
-            await ctx.send(f'Nothing found for "{title}" in {media_type}.')
+            await ctx.send(f'Nothing found for "{title}" in {media_type}.', ephemeral=True)
             return
 
         if len(results) > 1:
@@ -159,7 +159,7 @@ class Library(commands.Cog):
                 f'- {r.title} ({getattr(r, "year", "?")})' for r in results[:8]
             )
             await ctx.send(
-                f'Multiple matches — be more specific:\n{listing}'
+                f'Multiple matches — be more specific:\n{listing}', ephemeral=True
             )
             return
 
@@ -181,25 +181,25 @@ class Library(commands.Cog):
         else:
             embed.add_field(name='Warning', value='No file paths found — Plex entry will still be removed.', inline=False)
 
-        await ctx.send(embed=embed, view=ConfirmDeleteView(plex, item, paths))
+        await ctx.send(embed=embed, view=ConfirmDeleteView(plex, item, paths), ephemeral=True)
 
     @commands.hybrid_command(name='recent', description='Show recently added media in Plex')
     @require_auth()
     async def recent(self, ctx: commands.Context):
         plex = await self._build_plex()
         if not plex:
-            await ctx.send('Plex is not configured or unavailable.')
+            await ctx.send('Plex is not configured or unavailable.', ephemeral=True)
             return
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
         try:
             items = await plex.recently_added(count=10)
         except Exception as exc:
-            await ctx.send(f'Plex error: {exc}')
+            await ctx.send(f'Plex error: {exc}', ephemeral=True)
             return
         if not items:
-            await ctx.send('Nothing recently added.')
+            await ctx.send('Nothing recently added.', ephemeral=True)
             return
-        await ctx.send(embed=self._build_embed('Recently Added', items))
+        await ctx.send(embed=self._build_embed('Recently Added', items), ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
