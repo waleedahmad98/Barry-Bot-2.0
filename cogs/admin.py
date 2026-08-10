@@ -74,7 +74,7 @@ class Admin(commands.Cog):
         if static:
             embed.add_field(name='Config (static)', value=' '.join(f'<@{u}>' for u in sorted(static)), inline=False)
         if dynamic:
-            embed.add_field(name='Added via !allow', value=' '.join(f'<@{u}>' for u in sorted(dynamic)), inline=False)
+            embed.add_field(name='Added via /allow', value=' '.join(f'<@{u}>' for u in sorted(dynamic)), inline=False)
         if not (owner_id or static or dynamic):
             embed.description = 'No users configured.'
 

@@ -8,8 +8,8 @@ A Discord bot for managing torrents, Plex, and RSS downloads from your phone.
 
 - Python 3.11+
 - [qBittorrent](https://www.qbittorrent.org/) with Web UI enabled
-- [Jackett](https://github.com/Jackett/Jackett) or [Prowlarr](https://prowlarr.com/) (optional — needed for `!search`)
-- [Plex Media Server](https://www.plex.tv/) (optional — needed for `!movies` / `!shows`)
+- [Jackett](https://github.com/Jackett/Jackett) or [Prowlarr](https://prowlarr.com/) (optional — needed for `/search`)
+- [Plex Media Server](https://www.plex.tv/) (optional — needed for `/movies` / `/shows`)
 
 ---
 
@@ -18,11 +18,12 @@ A Discord bot for managing torrents, Plex, and RSS downloads from your phone.
 1. Go to <https://discord.com/developers/applications> and click **New Application**.
 2. Name it (e.g. *MediaBot*), then open the **Bot** tab.
 3. Click **Reset Token** and copy the token — this goes in `config.yaml`.
-4. Under **Privileged Gateway Intents**, enable **Message Content Intent**.
-5. Open **OAuth2 → URL Generator**:
+4. Open **OAuth2 → URL Generator**:
    - Scopes: `bot`, `applications.commands`
-   - Bot Permissions: `Send Messages`, `Embed Links`, `Read Message History`
-6. Open the generated URL in your browser and invite the bot to your server.
+   - Bot Permissions: `Send Messages`, `Embed Links`
+5. Open the generated URL in your browser and invite the bot to your server.
+
+This bot is slash-command only (no `!prefix` text commands), so it doesn't need the **Message Content Intent** or `Read Message History` permission.
 
 **Get your user ID** (to set as `owner_id`):
 - In Discord: Settings → Advanced → Enable Developer Mode.
@@ -50,7 +51,6 @@ Open `config.yaml` and fill in each section:
 ```yaml
 discord:
   token: "paste-your-bot-token-here"
-  prefix: "!"
   owner_id: 123456789          # your Discord user ID
   notify_channel: null         # optional: channel ID for RSS notifications
 ```
@@ -94,7 +94,7 @@ plex:
   shows_section: "TV Shows"
 ```
 
-### Jackett (optional — needed for `!search`)
+### Jackett (optional — needed for `/search`)
 
 1. Install Jackett: <https://github.com/Jackett/Jackett#installation-on-linux>
 2. Open <http://localhost:9117>, add your preferred indexers.
@@ -126,13 +126,7 @@ source venv/bin/activate
 python bot.py
 ```
 
-**First run only** — register slash commands with Discord:
-
-```
-!sync
-```
-
-This only needs to be done once (or after adding new commands).
+Slash commands are registered with Discord automatically on every startup — no manual step needed. If you add new commands while the bot is running, use `/sync` to re-register them without a restart.
 
 ---
 
@@ -173,9 +167,9 @@ journalctl -u mediabot -f
 By default only you (the `owner_id`) can use the bot.
 
 ```
-!allow @friend       — give someone access
-!deny @friend        — remove their access
-!allowed             — list everyone who has access
+/allow @friend       — give someone access
+/deny @friend        — remove their access
+/allowed             — list everyone who has access
 ```
 
 You can also pre-add users to `config.yaml` under `allowed_users`:
@@ -189,32 +183,32 @@ allowed_users:
 
 ## 7. Command Reference
 
-> **Privacy note:** When used as slash commands, all bot replies (search results, dropdowns, status messages, etc.) are private/ephemeral — only visible to the person who ran the command, so the channel doesn't get cluttered. The one exception: once a download is actually started, the bot posts a short public notification to the channel (e.g. "📥 @user started a download: **Title**") so everyone can see what's being grabbed. Prefix commands (`!search`, etc.) can't be made private — that's a Discord limitation — so use the slash-command versions (`/search`, `/download`, …) if you want private results.
+> **Privacy note:** This bot is slash-command only. All bot replies (search results, dropdowns, status messages, etc.) are private/ephemeral — only visible to the person who ran the command, so the channel doesn't get cluttered. The one exception: once a download is actually started, the bot posts a short public notification to the channel (e.g. "📥 @user started a download: **Title**") so everyone can see what's being grabbed.
 
 ### Torrents
 
 | Command | Description |
 |---|---|
-| `!search <query> [movies\|shows\|all]` | Search indexer → pick from dropdown → pick save folder |
-| `!download <magnet or URL> [movies\|shows\|downloads]` | Add directly to qBittorrent |
-| `!downloads` | List active and completed downloads |
-| `!dl_pause <name>` | Pause a torrent (partial name match) |
-| `!dl_resume <name>` | Resume a paused torrent |
-| `!dl_remove <name> [True]` | Remove a torrent; add `True` to also delete files |
+| `/search <query> [movies\|shows\|all]` | Search indexer → pick from dropdown → pick save folder |
+| `/download <magnet or URL> [movies\|shows\|downloads]` | Add directly to qBittorrent |
+| `/downloads` | List active and completed downloads |
+| `/dl_pause <name>` | Pause a torrent (partial name match) |
+| `/dl_resume <name>` | Resume a paused torrent |
+| `/dl_remove <name> [True]` | Remove a torrent; add `True` to also delete files |
 
 ### Plex Library
 
 | Command | Description |
 |---|---|
-| `!movies [query]` | List all movies, or search by title |
-| `!shows [query]` | List all TV shows, or search by title |
-| `!recent` | Show recently added media |
-| `!delete <title> [movies\|shows]` | Delete a movie or show from Plex and disk |
+| `/movies [query]` | List all movies, or search by title |
+| `/shows [query]` | List all TV shows, or search by title |
+| `/recent` | Show recently added media |
+| `/delete <title> [movies\|shows]` | Delete a movie or show from Plex and disk |
 
 **Delete example:**
 ```
-!delete "Breaking Bad" shows
-!delete "The Matrix" movies
+/delete title:"Breaking Bad" media_type:shows
+/delete title:"The Matrix" media_type:movies
 ```
 
 The bot will show exactly which files/folders will be removed and ask for confirmation before doing anything. On confirm it deletes the files from disk and removes the entry from Plex.
@@ -227,15 +221,15 @@ The bot will show exactly which files/folders will be removed and ask for confir
 
 | Command | Description |
 |---|---|
-| `!rss add <url> <name> [category] [keywords] [save_path]` | Add a feed |
-| `!rss list` | Show all configured feeds and their last check time |
-| `!rss remove <id>` | Remove a feed by its ID |
-| `!rss check` | Trigger an immediate check right now |
+| `/rss add <url> <name> [category] [keywords] [save_path]` | Add a feed |
+| `/rss list` | Show all configured feeds and their last check time |
+| `/rss remove <id>` | Remove a feed by its ID |
+| `/rss check` | Trigger an immediate check right now |
 
 **RSS example — auto-download a show:**
 
 ```
-!rss add https://showrss.info/show/123.rss "Severance" shows "Severance" /media/shows/Severance
+/rss add url:https://showrss.info/show/123.rss name:"Severance" category:shows keywords:"Severance" save_path:/media/shows/Severance
 ```
 
 - `keywords` filters by title (comma-separated). Leave empty to grab everything in the feed.
@@ -245,15 +239,13 @@ The bot will show exactly which files/folders will be removed and ask for confir
 
 | Command | Description |
 |---|---|
-| `!allow @user` | Add a user to the allowlist |
-| `!deny @user` | Remove a user |
-| `!allowed` | List all allowed users |
-| `!status` | Show configured services at a glance |
-| `!reload <cog>` | Reload a cog without restarting (owner only) |
-| `!sync` | Re-sync slash commands with Discord (owner only) |
-| `!ping` | Check bot latency |
-
-All commands work as both `!prefix` and `/slash` commands.
+| `/allow @user` | Add a user to the allowlist |
+| `/deny @user` | Remove a user |
+| `/allowed` | List all allowed users |
+| `/status` | Show configured services at a glance |
+| `/reload <cog>` | Reload a cog without restarting (owner only) |
+| `/sync` | Re-sync slash commands with Discord (owner only) |
+| `/ping` | Check bot latency |
 
 ---
 
@@ -266,7 +258,7 @@ The bot is built with cogs — each feature is a self-contained file in `cogs/`.
    ```python
    for cog in ('cogs.torrents', 'cogs.library', 'cogs.rss', 'cogs.admin', 'cogs.myfeature'):
    ```
-3. Reload without restarting: `!reload myfeature`
+3. Reload without restarting: `/reload myfeature`
 
 ---
 
@@ -274,8 +266,7 @@ The bot is built with cogs — each feature is a self-contained file in `cogs/`.
 
 **Bot not responding to commands**
 - Check the token in `config.yaml` is correct.
-- Make sure **Message Content Intent** is enabled in the developer portal.
-- Verify you ran `!sync` to register slash commands.
+- Slash commands sync automatically on startup — check the bot's logs for `Synced N slash command(s)`. If they're still missing in Discord, run `/sync` manually and/or wait a few minutes for Discord's cache to refresh.
 
 **Search not working**
 - Confirm Jackett/Prowlarr is running and at least one indexer is configured.
@@ -289,6 +280,6 @@ The bot is built with cogs — each feature is a self-contained file in `cogs/`.
 - Confirm the token is correct and the library section names in `config.yaml` match exactly what appears in Plex (case-sensitive).
 
 **RSS not downloading**
-- Run `!rss check` to trigger manually and watch the bot logs.
+- Run `/rss check` to trigger manually and watch the bot logs.
 - Make sure the feed URL is reachable from the device running the bot.
 - Check that `keywords` aren't too restrictive — try removing them to grab all items.

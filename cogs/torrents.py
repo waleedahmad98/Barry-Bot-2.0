@@ -151,7 +151,7 @@ class Torrents(commands.Cog):
         if not jackett:
             await ctx.send(
                 'Torrent search is not configured. Set `indexer.api_key` in config.yaml.\n'
-                'You can still download directly with `!download <magnet/url>`.',
+                'You can still download directly with `/download <magnet/url>`.',
                 ephemeral=True,
             )
             return
