@@ -81,7 +81,7 @@ class Admin(commands.Cog):
         await ctx.send(embed=embed, ephemeral=True)
 
     @commands.hybrid_command(name='reload', description='Reload a bot cog')
-    @app_commands.describe(cog='Cog name: torrents, library, rss, admin')
+    @app_commands.describe(cog='Cog name: torrents, library, admin')
     async def reload(self, ctx: commands.Context, cog: str):
         if not self._is_owner(ctx.author):
             await ctx.send('Only the owner can reload cogs.', ephemeral=True)
@@ -132,10 +132,6 @@ class Admin(commands.Cog):
             else 'Not configured'
         )
         embed.add_field(name='Indexer', value=idx_val, inline=True)
-
-        from cogs.rss import _load_feeds
-        rss_feeds = _load_feeds()
-        embed.add_field(name='RSS feeds', value=str(len(rss_feeds)), inline=True)
         embed.add_field(name='Latency', value=f'{self.bot.latency * 1000:.1f} ms', inline=True)
 
         await ctx.send(embed=embed, ephemeral=True)

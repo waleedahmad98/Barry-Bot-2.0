@@ -1,6 +1,6 @@
 # Media Bot (Base for Barry Bot) — Setup & Usage
 
-A Discord bot for managing torrents, Plex, and RSS downloads from your phone.
+A Discord bot for managing torrents and Plex from your phone.
 
 ---
 
@@ -52,7 +52,6 @@ Open `config.yaml` and fill in each section:
 discord:
   token: "paste-your-bot-token-here"
   owner_id: 123456789          # your Discord user ID
-  notify_channel: null         # optional: channel ID for RSS notifications
 ```
 
 ### qBittorrent (required for downloads)
@@ -109,13 +108,6 @@ indexer:
 ```
 
 For Prowlarr, change `type` to `prowlarr` and `port` to `9696`.
-
-### RSS interval
-
-```yaml
-rss:
-  check_interval: 30    # minutes between automatic checks
-```
 
 ---
 
@@ -217,24 +209,6 @@ The bot will show exactly which files/folders will be removed and ask for confir
 - **Movies** — deletes the video file(s) and the movie's folder if it becomes empty
 - If the title matches more than one result the bot will list them and ask you to be more specific
 
-### RSS Auto-Download
-
-| Command | Description |
-|---|---|
-| `/rss add <url> <name> [category] [keywords] [save_path]` | Add a feed |
-| `/rss list` | Show all configured feeds and their last check time |
-| `/rss remove <id>` | Remove a feed by its ID |
-| `/rss check` | Trigger an immediate check right now |
-
-**RSS example — auto-download a show:**
-
-```
-/rss add url:https://showrss.info/show/123.rss name:"Severance" category:shows keywords:"Severance" save_path:/media/shows/Severance
-```
-
-- `keywords` filters by title (comma-separated). Leave empty to grab everything in the feed.
-- `save_path` overrides the category default path for this specific feed.
-
 ### Admin
 
 | Command | Description |
@@ -256,7 +230,7 @@ The bot is built with cogs — each feature is a self-contained file in `cogs/`.
 1. Create `cogs/myfeature.py` following the pattern of any existing cog.
 2. Add it to the `cogs` list in `bot.py`:
    ```python
-   for cog in ('cogs.torrents', 'cogs.library', 'cogs.rss', 'cogs.admin', 'cogs.myfeature'):
+   for cog in ('cogs.torrents', 'cogs.library', 'cogs.admin', 'cogs.myfeature'):
    ```
 3. Reload without restarting: `/reload myfeature`
 
@@ -278,8 +252,3 @@ The bot is built with cogs — each feature is a self-contained file in `cogs/`.
 
 **Plex commands not working**
 - Confirm the token is correct and the library section names in `config.yaml` match exactly what appears in Plex (case-sensitive).
-
-**RSS not downloading**
-- Run `/rss check` to trigger manually and watch the bot logs.
-- Make sure the feed URL is reachable from the device running the bot.
-- Check that `keywords` aren't too restrictive — try removing them to grab all items.
