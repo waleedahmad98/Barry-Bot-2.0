@@ -1,15 +1,20 @@
 # Media Bot (Base for Barry Bot) — Setup & Usage
 
-A Discord bot for managing torrents and Plex from your phone.
+A Discord bot for managing torrents, requesting movies/shows, and browsing Plex/Jellyfin from your phone.
 
 ---
 
 ## Prerequisites
 
 - Python 3.11+
-- [qBittorrent](https://www.qbittorrent.org/) with Web UI enabled
-- [Jackett](https://github.com/Jackett/Jackett) or [Prowlarr](https://prowlarr.com/) (optional — needed for `/search`)
+- [qBittorrent](https://www.qbittorrent.org/) with Web UI enabled — the download client everything else hands torrents to
+- [Jackett](https://github.com/Jackett/Jackett) or [Prowlarr](https://prowlarr.com/) — indexer proxy used directly by `/search`, and by Radarr/Sonarr for automatic requests
+- [Radarr](https://radarr.video/) (optional — needed for `/request_movie`)
+- [Sonarr](https://sonarr.tv/) (optional — needed for `/request_show`)
 - [Plex Media Server](https://www.plex.tv/) (optional — needed for `/movies` / `/shows`)
+- [Jellyfin](https://jellyfin.org/) (optional — needed for `/jf_movies` / `/jf_shows`)
+
+You can run Plex, Jellyfin, both, or neither — same for Radarr/Sonarr vs. the manual `/search` flow. Nothing here is mutually exclusive.
 
 ---
 
@@ -109,6 +114,58 @@ indexer:
 
 For Prowlarr, change `type` to `prowlarr` and `port` to `9696`.
 
+### Radarr (optional — needed for `/request_movie`)
+
+1. Install Radarr: <https://wiki.servarr.com/radarr/installation>
+2. In Radarr, go to **Settings → Indexers** and add Jackett/Prowlarr as an indexer, and **Settings → Download Clients** and add qBittorrent — Radarr needs its own indexer/download-client hookup so it can search and grab automatically once you request something.
+3. Note the **Quality Profile** name you want new requests to use (**Settings → Profiles**) and the **Root Folder** path (**Settings → Media Management**) — these must match your config exactly.
+4. Copy the **API Key** from **Settings → General**.
+
+```yaml
+radarr:
+  host: "http://localhost"
+  port: 7878
+  api_key: "your-radarr-api-key"
+  quality_profile: "HD-1080p"     # must match a profile name in Radarr exactly
+  root_folder: "/movies"          # must match a root folder configured in Radarr exactly
+```
+
+### Sonarr (optional — needed for `/request_show`)
+
+Same idea as Radarr, for TV:
+
+1. Install Sonarr: <https://wiki.servarr.com/sonarr/installation>
+2. Hook up Jackett/Prowlarr as an indexer and qBittorrent as a download client in Sonarr too.
+3. Note the Quality Profile name and Root Folder path.
+4. Copy the API Key from **Settings → General**.
+
+```yaml
+sonarr:
+  host: "http://localhost"
+  port: 8989
+  api_key: "your-sonarr-api-key"
+  quality_profile: "HD-1080p"     # must match a profile name in Sonarr exactly
+  root_folder: "/shows"           # must match a root folder configured in Sonarr exactly
+```
+
+Requests made through `/request_movie` and `/request_show` monitor the item and trigger an automatic search in Radarr/Sonarr — the bot doesn't touch qBittorrent directly for these; Radarr/Sonarr do that themselves using the indexer/download-client setup above. The bot's `/search` and `/download` commands remain a separate, manual path for one-off torrents that aren't a "monitor this permanently" request.
+
+### Jellyfin (optional)
+
+Get an API key and your user ID:
+1. In Jellyfin, go to **Dashboard → API Keys → +** and create a new key.
+2. Go to **Dashboard → Users**, click your admin user, and copy the ID from the page URL (`.../userdetails?userId=XXXXXX`).
+
+```yaml
+jellyfin:
+  host: "http://localhost"
+  port: 8096
+  api_key: "your-jellyfin-api-key"
+  user_id: "your-jellyfin-user-id"
+```
+
+Jellyfin's commands (`/jf_movies`, `/jf_shows`, `/jf_recent`, `/jf_delete`) are separate from Plex's (`/movies`, `/shows`, `/recent`, `/delete`) — run one or both side by side without either interfering with the other.
+
 ---
 
 ## 4. Run the Bot
@@ -175,7 +232,7 @@ allowed_users:
 
 ## 7. Command Reference
 
-> **Privacy note:** This bot is slash-command only. All bot replies (search results, dropdowns, status messages, etc.) are private/ephemeral — only visible to the person who ran the command, so the channel doesn't get cluttered. The one exception: once a download is actually started, the bot posts a short public notification to the channel (e.g. "📥 @user started a download: **Title**") so everyone can see what's being grabbed.
+> **Privacy note:** This bot is slash-command only. All bot replies (search results, dropdowns, status messages, etc.) are private/ephemeral — only visible to the person who ran the command, so the channel doesn't get cluttered. The one exception: once a download actually starts or a request is placed, the bot posts a short public notification to the channel (e.g. "📥 @user started a download: **Title**" or "🎬 @user requested a movie: **Title**") so everyone can see what's being grabbed.
 
 ### Torrents
 
@@ -187,6 +244,15 @@ allowed_users:
 | `/dl_pause <name>` | Pause a torrent (partial name match) |
 | `/dl_resume <name>` | Resume a paused torrent |
 | `/dl_remove <name> [True]` | Remove a torrent; add `True` to also delete files |
+
+### Requests (Radarr / Sonarr)
+
+| Command | Description |
+|---|---|
+| `/request_movie <query>` | Search TMDB via Radarr → pick from dropdown → monitors it and searches automatically |
+| `/request_show <query>` | Search TVDB via Sonarr → pick from dropdown → monitors all seasons and searches automatically |
+
+Picking a result adds it to Radarr/Sonarr with the quality profile and root folder from `config.yaml`, turns on monitoring, and kicks off an automatic search — Radarr/Sonarr handle finding and grabbing the torrent themselves from there. If it's already in Radarr/Sonarr, the bot tells you instead of adding a duplicate.
 
 ### Plex Library
 
@@ -209,6 +275,17 @@ The bot will show exactly which files/folders will be removed and ask for confir
 - **Movies** — deletes the video file(s) and the movie's folder if it becomes empty
 - If the title matches more than one result the bot will list them and ask you to be more specific
 
+### Jellyfin Library
+
+| Command | Description |
+|---|---|
+| `/jf_movies [query]` | List all movies, or search by title |
+| `/jf_shows [query]` | List all TV shows, or search by title |
+| `/jf_recent` | Show recently added media |
+| `/jf_delete <title> [movies\|shows]` | Delete a movie or show from Jellyfin and disk |
+
+Behaves identically to the Plex commands above (same confirmation step, same disk-deletion rules) — it's the same feature against a different media server, kept as its own command set so you always know which library you're looking at.
+
 ### Admin
 
 | Command | Description |
@@ -230,7 +307,7 @@ The bot is built with cogs — each feature is a self-contained file in `cogs/`.
 1. Create `cogs/myfeature.py` following the pattern of any existing cog.
 2. Add it to the `cogs` list in `bot.py`:
    ```python
-   for cog in ('cogs.torrents', 'cogs.library', 'cogs.admin', 'cogs.myfeature'):
+   for cog in ('cogs.torrents', 'cogs.library', 'cogs.jellyfin', 'cogs.requests', 'cogs.admin', 'cogs.myfeature'):
    ```
 3. Reload without restarting: `/reload myfeature`
 
@@ -252,3 +329,12 @@ The bot is built with cogs — each feature is a self-contained file in `cogs/`.
 
 **Plex commands not working**
 - Confirm the token is correct and the library section names in `config.yaml` match exactly what appears in Plex (case-sensitive).
+
+**Jellyfin commands not working**
+- Confirm the API key and `user_id` are correct — `user_id` must be an actual Jellyfin user's ID (usually your admin account), not the API key itself.
+- Test it directly: `http://localhost:8096/System/Info?api_key=YOUR_KEY` should return JSON, not an error.
+
+**`/request_movie` or `/request_show` failing**
+- Check `radarr.api_key` / `sonarr.api_key` and that the bot can reach the host/port.
+- `quality_profile` and `root_folder` must match an existing profile name and root folder path *exactly* as configured in Radarr/Sonarr — check **Settings → Profiles** and **Settings → Media Management** there if you get a "not found" error.
+- If the request goes through but nothing downloads, the problem is on the Radarr/Sonarr side — check that they have a working indexer (Jackett/Prowlarr) and download client (qBittorrent) configured under their own Settings, since the bot doesn't touch qBittorrent for requests.

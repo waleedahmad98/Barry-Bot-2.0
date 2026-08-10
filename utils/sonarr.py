@@ -1,0 +1,62 @@
+import logging
+from dataclasses import dataclass, field
+from typing import Optional
+
+from utils.arr import ArrClient
+
+log = logging.getLogger('mediabot.sonarr')
+
+
+@dataclass
+class SeriesResult:
+    tvdb_id: int
+    title: str
+    year: Optional[int]
+    overview: str
+    poster_url: Optional[str]
+    already_added: bool
+    raw: dict = field(repr=False)
+
+
+class SonarrClient(ArrClient):
+    async def lookup(self, term: str) -> list[SeriesResult]:
+        results = await self._get('/api/v3/series/lookup', params={'term': term})
+        return [self._map(r) for r in results[:25]]
+
+    async def add(self, result: SeriesResult) -> tuple[bool, Optional[str]]:
+        if result.already_added:
+            return False, 'Already in Sonarr.'
+        try:
+            profile_id = await self.quality_profile_id()
+        except Exception as exc:
+            return False, str(exc)
+
+        body = dict(result.raw)
+        seasons = body.get('seasons', [])
+        for season in seasons:
+            season['monitored'] = True
+        body.update({
+            'qualityProfileId': profile_id,
+            'rootFolderPath': self.root_folder,
+            'seasonFolder': True,
+            'monitored': True,
+            'seasons': seasons,
+            'addOptions': {'monitor': 'all', 'searchForMissingEpisodes': True},
+        })
+        try:
+            await self._post('/api/v3/series', body)
+            return True, None
+        except Exception as exc:
+            log.error(f'Failed to add series to Sonarr: {exc}')
+            return False, str(exc)
+
+    def _map(self, r: dict) -> SeriesResult:
+        return SeriesResult(
+            tvdb_id=r.get('tvdbId', 0),
+            title=r.get('title', 'Unknown'),
+            year=r.get('year'),
+            overview=(r.get('overview') or '').strip(),
+            poster_url=self.poster_url(r),
+            already_added=bool(r.get('id')),
+            raw=r,
+        )
