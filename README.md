@@ -261,8 +261,14 @@ allowed_users:
 |---|---|
 | `/request_movie <query>` | Search TMDB via Radarr → pick from dropdown → monitors it and searches automatically |
 | `/request_show <query>` | Search TVDB via Sonarr → pick from dropdown → monitors all seasons and searches automatically |
+| `/remove_movie <title> [delete_files]` | Remove a movie from Radarr; deletes its files too unless `delete_files:False` |
+| `/remove_show <title> [delete_files]` | Remove a show from Sonarr; deletes its files too unless `delete_files:False` |
 
 Picking a result adds it to Radarr/Sonarr with the quality profile and root folder from `config.yaml`, turns on monitoring, and kicks off an automatic search — Radarr/Sonarr handle finding and grabbing the torrent themselves from there. If it's already in Radarr/Sonarr, the bot tells you instead of adding a duplicate.
+
+`/remove_movie` and `/remove_show` match by partial title (same "be more specific" behavior as the torrent commands if more than one matches), then ask for confirmation before actually removing anything — same pattern as `/delete` and `/jf_delete`.
+
+> **Note:** `/delete` and `/jf_delete` only remove media from Plex/Jellyfin's library and disk — they don't touch Radarr/Sonarr. If something is still monitored there, Radarr/Sonarr will consider it "missing" and may re-download it on their next search. To actually stop that, remove it from Radarr/Sonarr too with `/remove_movie` / `/remove_show` (or unmonitor it directly in Radarr/Sonarr).
 
 ### Plex Library
 

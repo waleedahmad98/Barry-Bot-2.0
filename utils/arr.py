@@ -35,6 +35,14 @@ class ArrClient:
                     raise RuntimeError(f'{path} failed ({resp.status}): {text}')
                 return await resp.json()
 
+    async def _delete(self, path: str, params: Optional[dict] = None):
+        timeout = aiohttp.ClientTimeout(total=20)
+        async with aiohttp.ClientSession(timeout=timeout, headers=self._headers()) as session:
+            async with session.delete(f'{self.base_url}{path}', params=params) as resp:
+                if resp.status not in (200, 202, 204):
+                    text = await resp.text()
+                    raise RuntimeError(f'{path} failed ({resp.status}): {text}')
+
     async def connect(self) -> bool:
         try:
             await self._get('/api/v3/system/status')

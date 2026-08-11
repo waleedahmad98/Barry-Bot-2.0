@@ -9,6 +9,7 @@ log = logging.getLogger('mediabot.sonarr')
 
 @dataclass
 class SeriesResult:
+    id: int
     tvdb_id: int
     title: str
     year: Optional[int]
@@ -22,6 +23,22 @@ class SonarrClient(ArrClient):
     async def lookup(self, term: str) -> list[SeriesResult]:
         results = await self._get('/api/v3/series/lookup', params={'term': term})
         return [self._map(r) for r in results[:25]]
+
+    async def list_library(self) -> list[SeriesResult]:
+        """All series currently in Sonarr (for locating one to remove)."""
+        results = await self._get('/api/v3/series')
+        return [self._map(r) for r in results]
+
+    async def remove(self, series_id: int, delete_files: bool = True) -> tuple[bool, Optional[str]]:
+        try:
+            await self._delete(
+                f'/api/v3/series/{series_id}',
+                params={'deleteFiles': str(delete_files).lower(), 'addImportListExclusion': 'false'},
+            )
+            return True, None
+        except Exception as exc:
+            log.error(f'Failed to remove series from Sonarr: {exc}')
+            return False, str(exc)
 
     async def add(self, result: SeriesResult) -> tuple[bool, Optional[str]]:
         if result.already_added:
@@ -52,6 +69,7 @@ class SonarrClient(ArrClient):
 
     def _map(self, r: dict) -> SeriesResult:
         return SeriesResult(
+            id=r.get('id', 0),
             tvdb_id=r.get('tvdbId', 0),
             title=r.get('title', 'Unknown'),
             year=r.get('year'),

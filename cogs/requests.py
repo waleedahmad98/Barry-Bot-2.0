@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 import discord
 from discord import app_commands
@@ -124,6 +124,36 @@ class SeriesRequestView(discord.ui.View):
             )
 
 
+class ConfirmRemoveView(discord.ui.View):
+    def __init__(self, remove: Callable[[], Awaitable[tuple[bool, Optional[str]]]], title: str):
+        super().__init__(timeout=30)
+        self._remove = remove
+        self._title = title
+
+    async def _disable(self, interaction: discord.Interaction):
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(view=self)
+
+    @discord.ui.button(label='Yes, remove', style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._disable(interaction)
+        success, reason = await self._remove()
+        color = discord.Color.green() if success else discord.Color.red()
+        title = 'Removed' if success else 'Could not remove'
+        desc = f'**{truncate(self._title, 200)}**'
+        if reason:
+            desc += f'\n_{reason}_'
+        await interaction.followup.send(
+            embed=discord.Embed(title=title, description=desc, color=color), ephemeral=True
+        )
+
+    @discord.ui.button(label='Cancel', style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._disable(interaction)
+        await interaction.followup.send('Cancelled.', ephemeral=True)
+
+
 # ── Cog ───────────────────────────────────────────────────────────────────────
 
 class Requests(commands.Cog):
@@ -245,6 +275,104 @@ class Requests(commands.Cog):
             embed.set_footer(text=f'+{len(results) - 10} more in dropdown')
 
         await ctx.send(embed=embed, view=SeriesRequestView(results, sonarr), ephemeral=True)
+
+    @commands.hybrid_command(name='remove_movie', description='Remove a movie from Radarr')
+    @app_commands.describe(
+        title='Movie title (partial match ok)',
+        delete_files='Also delete the downloaded files from disk',
+    )
+    @require_auth()
+    async def remove_movie(self, ctx: commands.Context, title: str, delete_files: bool = True):
+        radarr = await self._build_radarr()
+        if not radarr:
+            await ctx.send(
+                'Radarr is not configured or unavailable. Set `radarr.api_key` in config.yaml.',
+                ephemeral=True,
+            )
+            return
+
+        await ctx.defer(ephemeral=True)
+
+        try:
+            library = await radarr.list_library()
+        except Exception as exc:
+            await ctx.send(f'Radarr lookup failed: {exc}', ephemeral=True)
+            return
+
+        matches = [m for m in library if title.lower() in m.title.lower()]
+        if not matches:
+            await ctx.send(f'No movie matching "{title}" in Radarr.', ephemeral=True)
+            return
+        if len(matches) > 1:
+            listing = '\n'.join(f'- {m.title} ({m.year or "?"})' for m in matches[:8])
+            await ctx.send(f'Multiple matches — be more specific:\n{listing}', ephemeral=True)
+            return
+
+        movie = matches[0]
+        year = f' ({movie.year})' if movie.year else ''
+        embed = discord.Embed(
+            title=f'Remove {movie.title}{year} from Radarr?',
+            description=(
+                'This removes it from Radarr **and deletes its files from disk.**'
+                if delete_files
+                else 'This removes it from Radarr but leaves any downloaded files on disk.'
+            ),
+            color=discord.Color.red(),
+        )
+        await ctx.send(
+            embed=embed,
+            view=ConfirmRemoveView(lambda: radarr.remove(movie.id, delete_files), movie.title),
+            ephemeral=True,
+        )
+
+    @commands.hybrid_command(name='remove_show', description='Remove a TV show from Sonarr')
+    @app_commands.describe(
+        title='Show title (partial match ok)',
+        delete_files='Also delete the downloaded files from disk',
+    )
+    @require_auth()
+    async def remove_show(self, ctx: commands.Context, title: str, delete_files: bool = True):
+        sonarr = await self._build_sonarr()
+        if not sonarr:
+            await ctx.send(
+                'Sonarr is not configured or unavailable. Set `sonarr.api_key` in config.yaml.',
+                ephemeral=True,
+            )
+            return
+
+        await ctx.defer(ephemeral=True)
+
+        try:
+            library = await sonarr.list_library()
+        except Exception as exc:
+            await ctx.send(f'Sonarr lookup failed: {exc}', ephemeral=True)
+            return
+
+        matches = [s for s in library if title.lower() in s.title.lower()]
+        if not matches:
+            await ctx.send(f'No show matching "{title}" in Sonarr.', ephemeral=True)
+            return
+        if len(matches) > 1:
+            listing = '\n'.join(f'- {s.title} ({s.year or "?"})' for s in matches[:8])
+            await ctx.send(f'Multiple matches — be more specific:\n{listing}', ephemeral=True)
+            return
+
+        series = matches[0]
+        year = f' ({series.year})' if series.year else ''
+        embed = discord.Embed(
+            title=f'Remove {series.title}{year} from Sonarr?',
+            description=(
+                'This removes it from Sonarr **and deletes its files from disk.**'
+                if delete_files
+                else 'This removes it from Sonarr but leaves any downloaded files on disk.'
+            ),
+            color=discord.Color.red(),
+        )
+        await ctx.send(
+            embed=embed,
+            view=ConfirmRemoveView(lambda: sonarr.remove(series.id, delete_files), series.title),
+            ephemeral=True,
+        )
 
 
 async def setup(bot: commands.Bot):

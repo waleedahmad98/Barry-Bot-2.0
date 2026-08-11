@@ -9,6 +9,7 @@ log = logging.getLogger('mediabot.radarr')
 
 @dataclass
 class MovieResult:
+    id: int
     tmdb_id: int
     title: str
     year: Optional[int]
@@ -22,6 +23,22 @@ class RadarrClient(ArrClient):
     async def lookup(self, term: str) -> list[MovieResult]:
         results = await self._get('/api/v3/movie/lookup', params={'term': term})
         return [self._map(r) for r in results[:25]]
+
+    async def list_library(self) -> list[MovieResult]:
+        """All movies currently in Radarr (for locating one to remove)."""
+        results = await self._get('/api/v3/movie')
+        return [self._map(r) for r in results]
+
+    async def remove(self, movie_id: int, delete_files: bool = True) -> tuple[bool, Optional[str]]:
+        try:
+            await self._delete(
+                f'/api/v3/movie/{movie_id}',
+                params={'deleteFiles': str(delete_files).lower(), 'addImportExclusion': 'false'},
+            )
+            return True, None
+        except Exception as exc:
+            log.error(f'Failed to remove movie from Radarr: {exc}')
+            return False, str(exc)
 
     async def add(self, result: MovieResult) -> tuple[bool, Optional[str]]:
         if result.already_added:
@@ -48,6 +65,7 @@ class RadarrClient(ArrClient):
 
     def _map(self, r: dict) -> MovieResult:
         return MovieResult(
+            id=r.get('id', 0),
             tmdb_id=r.get('tmdbId', 0),
             title=r.get('title', 'Unknown'),
             year=r.get('year'),
