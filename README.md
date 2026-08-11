@@ -174,7 +174,7 @@ jellyfin:
   user_id: "your-jellyfin-user-id"
 ```
 
-Jellyfin's commands (`/jf_movies`, `/jf_shows`, `/jf_recent`, `/jf_delete`) are separate from Plex's (`/movies`, `/shows`, `/recent`, `/delete`) — run one or both side by side without either interfering with the other.
+Jellyfin's commands (`/jf_movies`, `/jf_shows`, `/jf_recent`) are separate from Plex's (`/movies`, `/shows`, `/recent`) — run one or both side by side without either interfering with the other.
 
 ---
 
@@ -266,9 +266,7 @@ allowed_users:
 
 Picking a result adds it to Radarr/Sonarr with the quality profile and root folder from `config.yaml`, turns on monitoring, and kicks off an automatic search — Radarr/Sonarr handle finding and grabbing the torrent themselves from there. If it's already in Radarr/Sonarr, the bot tells you instead of adding a duplicate.
 
-`/remove_movie` and `/remove_show` match by partial title (same "be more specific" behavior as the torrent commands if more than one matches), then ask for confirmation before actually removing anything — same pattern as `/delete` and `/jf_delete`.
-
-> **Note:** `/delete` and `/jf_delete` only remove media from Plex/Jellyfin's library and disk — they don't touch Radarr/Sonarr. If something is still monitored there, Radarr/Sonarr will consider it "missing" and may re-download it on their next search. To actually stop that, remove it from Radarr/Sonarr too with `/remove_movie` / `/remove_show` (or unmonitor it directly in Radarr/Sonarr).
+`/remove_movie` and `/remove_show` match by partial title (same "be more specific" behavior as the torrent commands if more than one matches), then ask for confirmation before actually removing anything. This is the only removal path in the bot — deleting is always routed through Radarr/Sonarr so monitoring is turned off at the same time the files go, instead of leaving something that Radarr/Sonarr will just re-download on its next search.
 
 ### Plex Library
 
@@ -277,19 +275,6 @@ Picking a result adds it to Radarr/Sonarr with the quality profile and root fold
 | `/movies [query]` | List all movies, or search by title |
 | `/shows [query]` | List all TV shows, or search by title |
 | `/recent` | Show recently added media |
-| `/delete <title> [movies\|shows]` | Delete a movie or show from Plex and disk |
-
-**Delete example:**
-```
-/delete title:"Breaking Bad" media_type:shows
-/delete title:"The Matrix" media_type:movies
-```
-
-The bot will show exactly which files/folders will be removed and ask for confirmation before doing anything. On confirm it deletes the files from disk and removes the entry from Plex.
-
-- **Shows** — deletes the entire show folder (all seasons included)
-- **Movies** — deletes the video file(s) and the movie's folder if it becomes empty
-- If the title matches more than one result the bot will list them and ask you to be more specific
 
 ### Jellyfin Library
 
@@ -298,9 +283,8 @@ The bot will show exactly which files/folders will be removed and ask for confir
 | `/jf_movies [query]` | List all movies, or search by title |
 | `/jf_shows [query]` | List all TV shows, or search by title |
 | `/jf_recent` | Show recently added media |
-| `/jf_delete <title> [movies\|shows]` | Delete a movie or show from Jellyfin and disk |
 
-Behaves identically to the Plex commands above (same confirmation step, same disk-deletion rules) — it's the same feature against a different media server, kept as its own command set so you always know which library you're looking at.
+Both library sections are browse-only — to remove something, use `/remove_movie` / `/remove_show` (Requests section above), which removes it from Radarr/Sonarr and deletes the files, keeping monitoring state in sync with what's actually on disk.
 
 ### Admin
 
