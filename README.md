@@ -152,13 +152,13 @@ Requests made through `/request_movie` and `/request_show` monitor the item and 
 
 #### Download/import notifications (optional)
 
-Barry Bot only posts a notification when a request is *placed* — it has no visibility into what happens in Radarr/Sonarr afterwards. To get a message when something actually finishes downloading and gets imported, use Radarr/Sonarr's **own** built-in Discord notifications (no bot config involved):
+Barry Bot only posts a notification when a request is *placed* (a "Requested by …" card) — it has no visibility into what happens in Radarr/Sonarr afterwards. To get a message when something actually finishes downloading and gets imported, use Radarr/Sonarr's **own** built-in Discord notifications (no bot config involved):
 
 1. In Discord, go to the channel you want notifications in → **Edit Channel → Integrations → Webhooks → New Webhook**. Copy its **Webhook URL**.
-2. In Radarr, go to **Settings → Connect → + → Discord**. Paste the webhook URL, give it a name, and under **Notification Triggers** enable at least **On Import** (and **On Grab** if you also want a "started downloading" ping from Radarr's side). Save.
-3. Repeat step 2 in Sonarr with its own **Settings → Connect → Discord** entry — Radarr and Sonarr each need this configured separately, and you can point them at the same webhook URL or different channels.
+2. In Radarr, go to **Settings → Connect → + → Discord**. Paste the webhook URL, give it a name, and under **Notification Triggers** check **only "On File Import" / "On Import Complete"**. Leave **"On Movie Added"** and **"On Grab"** unchecked — the bot's own request card already covers "someone requested this," and "On Grab" just means a download started, not that it's actually available yet. Save.
+3. Repeat step 2 in Sonarr with its own **Settings → Connect → Discord** entry (its equivalent trigger is **"On Import"**, with **"On Series Add"** and **"On Grab"** left unchecked) — Radarr and Sonarr each need this configured separately, and you can point them at the same webhook URL or different channels.
 
-These messages come from Radarr/Sonarr directly (their own username/avatar and formatting), separate from Barry Bot's own request/download notifications — that's expected, since it's Radarr/Sonarr reporting on their own work rather than the bot.
+With only the import trigger enabled, you get exactly two messages per request: the bot's "Requested by …" card up front, and Radarr/Sonarr's own import notification once it's actually downloaded and available — no duplicate "added" message in between. These import messages come from Radarr/Sonarr directly (their own username/avatar and formatting), separate from Barry Bot's request card — that's expected, since it's Radarr/Sonarr reporting on their own work rather than the bot.
 
 ### Jellyfin (optional)
 
@@ -242,7 +242,7 @@ allowed_users:
 
 ## 7. Command Reference
 
-> **Privacy note:** This bot is slash-command only. All bot replies (search results, dropdowns, status messages, etc.) are private/ephemeral — only visible to the person who ran the command, so the channel doesn't get cluttered. The one exception: once a download actually starts or a request is placed, the bot posts a short public notification to the channel (e.g. "📥 @user started a download: **Title**" or "🎬 @user requested a movie: **Title**") so everyone can see what's being grabbed.
+> **Privacy note:** This bot is slash-command only. All bot replies (search results, dropdowns, status messages, etc.) are private/ephemeral — only visible to the person who ran the command, so the channel doesn't get cluttered. The one exception: once a download actually starts or a request is placed, the bot posts a short public notification to the channel — a plain "📥 @user started a download: **Title**" line for torrent downloads, or a "Requested by …" card (poster, title, overview) for `/request_movie` / `/request_show` — so everyone can see what's being grabbed.
 
 ### Torrents
 

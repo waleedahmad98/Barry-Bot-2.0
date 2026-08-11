@@ -19,6 +19,21 @@ def _field_desc(overview: str, already_added: bool, added_note: str) -> str:
     return desc
 
 
+def _request_card(
+    user: discord.abc.User, title: str, year: Optional[int], overview: str, poster_url: Optional[str]
+) -> discord.Embed:
+    """A single-message 'requested by X' card — no service-specific wording, just who and what."""
+    embed = discord.Embed(
+        title=truncate(f'{title} ({year})' if year else title, 256),
+        description=truncate(overview, 300) if overview else None,
+        color=discord.Color.gold(),
+    )
+    embed.set_author(name=f'Requested by {user.display_name}', icon_url=user.display_avatar.url)
+    if poster_url:
+        embed.set_thumbnail(url=poster_url)
+    return embed
+
+
 class MovieRequestView(discord.ui.View):
     def __init__(self, results: list[MovieResult], radarr: RadarrClient):
         super().__init__(timeout=120)
@@ -56,10 +71,10 @@ class MovieRequestView(discord.ui.View):
         )
 
         if success and interaction.channel is not None:
-            year = f' ({result.year})' if result.year else ''
             await interaction.channel.send(
-                f'🎬 {interaction.user.mention} requested a movie: **{truncate(result.title, 200)}{year}**',
-                allowed_mentions=discord.AllowedMentions(users=False),
+                embed=_request_card(
+                    interaction.user, result.title, result.year, result.overview, result.poster_url
+                )
             )
 
 
@@ -100,10 +115,10 @@ class SeriesRequestView(discord.ui.View):
         )
 
         if success and interaction.channel is not None:
-            year = f' ({result.year})' if result.year else ''
             await interaction.channel.send(
-                f'📺 {interaction.user.mention} requested a show: **{truncate(result.title, 200)}{year}**',
-                allowed_mentions=discord.AllowedMentions(users=False),
+                embed=_request_card(
+                    interaction.user, result.title, result.year, result.overview, result.poster_url
+                )
             )
 
 
