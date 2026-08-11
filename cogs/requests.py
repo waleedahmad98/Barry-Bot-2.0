@@ -61,20 +61,21 @@ class MovieRequestView(discord.ui.View):
         await interaction.response.edit_message(view=self)
 
         success, reason = await self.radarr.add(result)
-        color = discord.Color.green() if success else discord.Color.red()
-        title = 'Requested' if success else 'Could not request'
-        desc = f'**{truncate(result.title, 200)}**'
-        if reason:
-            desc += f'\n_{reason}_'
-        await interaction.followup.send(
-            embed=discord.Embed(title=title, description=desc, color=color), ephemeral=True
-        )
 
-        if success and interaction.channel is not None:
-            await interaction.channel.send(
-                embed=_request_card(
-                    interaction.user, result.title, result.year, result.overview, result.poster_url
+        if success:
+            if interaction.channel is not None:
+                await interaction.channel.send(
+                    embed=_request_card(
+                        interaction.user, result.title, result.year, result.overview, result.poster_url
+                    )
                 )
+        else:
+            desc = f'**{truncate(result.title, 200)}**'
+            if reason:
+                desc += f'\n_{reason}_'
+            await interaction.followup.send(
+                embed=discord.Embed(title='Could not request', description=desc, color=discord.Color.red()),
+                ephemeral=True,
             )
 
 
@@ -105,20 +106,21 @@ class SeriesRequestView(discord.ui.View):
         await interaction.response.edit_message(view=self)
 
         success, reason = await self.sonarr.add(result)
-        color = discord.Color.green() if success else discord.Color.red()
-        title = 'Requested' if success else 'Could not request'
-        desc = f'**{truncate(result.title, 200)}**'
-        if reason:
-            desc += f'\n_{reason}_'
-        await interaction.followup.send(
-            embed=discord.Embed(title=title, description=desc, color=color), ephemeral=True
-        )
 
-        if success and interaction.channel is not None:
-            await interaction.channel.send(
-                embed=_request_card(
-                    interaction.user, result.title, result.year, result.overview, result.poster_url
+        if success:
+            if interaction.channel is not None:
+                await interaction.channel.send(
+                    embed=_request_card(
+                        interaction.user, result.title, result.year, result.overview, result.poster_url
+                    )
                 )
+        else:
+            desc = f'**{truncate(result.title, 200)}**'
+            if reason:
+                desc += f'\n_{reason}_'
+            await interaction.followup.send(
+                embed=discord.Embed(title='Could not request', description=desc, color=discord.Color.red()),
+                ephemeral=True,
             )
 
 
