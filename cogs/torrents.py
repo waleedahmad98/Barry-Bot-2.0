@@ -382,19 +382,19 @@ class Torrents(commands.Cog):
             await qbit.resume(t.hash)
             await ctx.send(f'Resumed **{t.name}**.', ephemeral=True)
 
-    @commands.hybrid_command(name='delete_movie', description='Delete a downloaded movie from disk')
-    @app_commands.describe(title='Movie file/folder name (partial match ok)')
+    @commands.hybrid_command(
+        name='delete_from_disk', description='Delete a movie or show downloaded via /search or /download'
+    )
+    @app_commands.describe(
+        title='File/folder name (partial match ok)',
+        category='movies or shows',
+    )
     @require_auth()
-    async def delete_movie(self, ctx: commands.Context, *, title: str):
-        await self._delete_from_disk(ctx, 'movies', title)
+    async def delete_from_disk(self, ctx: commands.Context, title: str, category: str = 'movies'):
+        if category not in ('movies', 'shows'):
+            await ctx.send('`category` must be `movies` or `shows`.', ephemeral=True)
+            return
 
-    @commands.hybrid_command(name='delete_show', description='Delete a downloaded show from disk')
-    @app_commands.describe(title='Show folder name (partial match ok)')
-    @require_auth()
-    async def delete_show(self, ctx: commands.Context, *, title: str):
-        await self._delete_from_disk(ctx, 'shows', title)
-
-    async def _delete_from_disk(self, ctx: commands.Context, category: str, title: str):
         root = self.bot.config.get('paths', {}).get(category)
         if not root:
             await ctx.send(f'`paths.{category}` is not set in config.yaml.', ephemeral=True)
