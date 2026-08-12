@@ -121,15 +121,6 @@ class ConfirmFileDeleteView(discord.ui.View):
             await media_files.delete(self.entry)
         except OSError as exc:
             await interaction.followup.send(f'Deletion failed: {exc}', ephemeral=True)
-            return
-        await interaction.followup.send(
-            embed=discord.Embed(
-                title=f'Deleted: {self.entry.name}',
-                description=f'`{self.entry.path}`',
-                color=discord.Color.green(),
-            ),
-            ephemeral=True,
-        )
 
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):

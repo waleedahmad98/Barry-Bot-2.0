@@ -256,22 +256,24 @@ allowed_users:
 | `/dl_remove <name> [True]` | Remove a torrent; add `True` to also delete files |
 | `/delete_from_disk <title> [movies\|shows]` | Delete a movie or show downloaded via `/search`/`/download` from disk |
 
-`/delete_from_disk` looks directly at the top-level files/folders under `paths.movies`/`paths.shows` (`category` picks which, defaults to `movies`), matches by partial name, and asks for confirmation before deleting — no Plex, Jellyfin, Radarr, or Sonarr involved. Use this for anything grabbed manually through `/search`/`/download`; use `/remove_movie`/`/remove_show` instead for anything that went through a Radarr/Sonarr request.
+`/delete_from_disk` looks directly at the top-level files/folders under `paths.movies`/`paths.shows` (`category` picks which, defaults to `movies`), matches by partial name, and asks for confirmation before deleting — no Plex, Jellyfin, Radarr, or Sonarr involved. Like the Radarr/Sonarr removal commands, a successful delete is silent (buttons just gray out); you'll only hear from the bot if it fails. Use this for anything grabbed manually through `/search`/`/download`; use `/remove_movie`/`/remove_show` instead for anything that went through a Radarr/Sonarr request.
 
 ### Requests (Radarr / Sonarr)
 
 | Command | Description |
 |---|---|
-| `/request_movie <query>` | Search TMDB via Radarr → pick from dropdown → monitors it and searches automatically |
-| `/request_show <query>` | Search TVDB via Sonarr → pick from dropdown → pick season(s) → monitors and searches automatically |
+| `/request_movie <query>` | Search TMDB via Radarr → pick from dropdown → pick quality → Request |
+| `/request_show <query>` | Search TVDB via Sonarr → pick from dropdown → pick quality/season(s) → Request |
 | `/remove_movie <title> [delete_files]` | Remove a movie from Radarr; deletes its files too unless `delete_files:False` |
 | `/remove_show <title> [delete_files]` | Remove a show from Sonarr; deletes its files too unless `delete_files:False` |
 
-Picking a result adds it to Radarr/Sonarr with the quality profile and root folder from `config.yaml`, turns on monitoring, and kicks off an automatic search — Radarr/Sonarr handle finding and grabbing the torrent themselves from there. If it's already in Radarr/Sonarr, the bot tells you instead of adding a duplicate.
+Picking a title from the dropdown doesn't add it right away — it opens a second, private message with a **Quality Profile** picker (defaulting to `radarr.quality_profile`/`sonarr.quality_profile` from `config.yaml`, but overridable per request from whatever profiles actually exist in Radarr/Sonarr) and a **Request** button. Nothing is added to Radarr/Sonarr until you press it. If the title is already in Radarr/Sonarr, the bot tells you immediately instead of showing the picker.
 
-For shows, picking a title with more than one season shows a second dropdown to choose which season(s) to monitor — leave "All seasons" selected for the whole series, or pick one or more specific seasons (multi-select) to request just those. Shows with only one season skip straight to adding, since there's nothing to choose between. This is season-level only — Sonarr's own UI is still the place to monitor/search individual episodes.
+For shows with more than one season, that same message also has a **Seasons** picker (multi-select) — leave "All seasons" selected for the whole series, or pick one or more specific seasons to request just those. Shows with only one season skip that picker, since there's nothing to choose between. This is season-level only — Sonarr's own UI is still the place to monitor/search individual episodes.
 
-`/remove_movie` and `/remove_show` match by partial title (same "be more specific" behavior as the torrent commands if more than one matches), then ask for confirmation before actually removing anything. This is the only removal path in the bot — deleting is always routed through Radarr/Sonarr so monitoring is turned off at the same time the files go, instead of leaving something that Radarr/Sonarr will just re-download on its next search.
+Once you press Request, Radarr/Sonarr take it from there — they turn on monitoring for what you picked, using the root folder from `config.yaml`, and kick off an automatic search; the bot doesn't touch qBittorrent directly for these.
+
+`/remove_movie` and `/remove_show` match by partial title (same "be more specific" behavior as the torrent commands if more than one matches), then ask for confirmation before actually removing anything — success is silent (buttons just gray out); you'll only hear from the bot if it *fails*. This is the only removal path in the bot — deleting is always routed through Radarr/Sonarr so monitoring is turned off at the same time the files go, instead of leaving something that Radarr/Sonarr will just re-download on its next search.
 
 ### Plex Library
 

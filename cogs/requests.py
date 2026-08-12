@@ -10,7 +10,7 @@ from utils.radarr import MovieResult, RadarrClient
 from utils.sonarr import SeriesResult, SonarrClient
 
 
-# ── Interactive views ──────────────────────────────────────────────────────────
+# ── Shared helpers ──────────────────────────────────────────────────────────────
 
 def _field_desc(overview: str, already_added: bool, added_note: str) -> str:
     desc = truncate(overview, 100) if overview else 'No description.'
@@ -19,20 +19,181 @@ def _field_desc(overview: str, already_added: bool, added_note: str) -> str:
     return desc
 
 
-def _request_card(
-    user: discord.abc.User, title: str, year: Optional[int], overview: str, poster_url: Optional[str]
-) -> discord.Embed:
-    """A single-message 'requested by X' card — no service-specific wording, just who and what."""
+def _media_embed(title: str, year: Optional[int], overview: str, poster_url: Optional[str]) -> discord.Embed:
     embed = discord.Embed(
         title=truncate(f'{title} ({year})' if year else title, 256),
         description=truncate(overview, 300) if overview else None,
         color=discord.Color.gold(),
     )
-    embed.set_author(name=f'Requested by {user.display_name}', icon_url=user.display_avatar.url)
     if poster_url:
         embed.set_thumbnail(url=poster_url)
     return embed
 
+
+def _request_card(
+    user: discord.abc.User, title: str, year: Optional[int], overview: str, poster_url: Optional[str]
+) -> discord.Embed:
+    """A single-message 'requested by X' card — no service-specific wording, just who and what."""
+    embed = _media_embed(title, year, overview, poster_url)
+    embed.set_author(name=f'Requested by {user.display_name}', icon_url=user.display_avatar.url)
+    return embed
+
+
+def _default_profile_id(profiles: list[dict], wanted_name: str) -> Optional[int]:
+    match = next((p for p in profiles if p['name'].lower() == wanted_name.lower()), None)
+    if match:
+        return match['id']
+    return profiles[0]['id'] if profiles else None
+
+
+def _already_added_embed(title: str, service: str) -> discord.Embed:
+    return discord.Embed(
+        title='Could not request',
+        description=f'**{truncate(title, 200)}**\n_Already in {service}._',
+        color=discord.Color.red(),
+    )
+
+
+def _series_season_numbers(result: SeriesResult) -> list[int]:
+    return sorted(
+        {s.get('seasonNumber') for s in result.raw.get('seasons', []) if s.get('seasonNumber') is not None}
+    )
+
+
+def _season_label(n: int) -> str:
+    return 'Specials' if n == 0 else f'Season {n}'
+
+
+async def _finish_movie_request(
+    interaction: discord.Interaction, radarr: RadarrClient, result: MovieResult, profile_id: int, profile_name: str
+):
+    success, reason = await radarr.add(result, quality_profile_id=profile_id)
+
+    if success:
+        if interaction.channel is not None:
+            embed = _request_card(interaction.user, result.title, result.year, result.overview, result.poster_url)
+            embed.add_field(name='Quality', value=profile_name, inline=True)
+            await interaction.channel.send(embed=embed)
+    else:
+        desc = f'**{truncate(result.title, 200)}**'
+        if reason:
+            desc += f'\n_{reason}_'
+        await interaction.followup.send(
+            embed=discord.Embed(title='Could not request', description=desc, color=discord.Color.red()),
+            ephemeral=True,
+        )
+
+
+async def _finish_series_request(
+    interaction: discord.Interaction,
+    sonarr: SonarrClient,
+    result: SeriesResult,
+    profile_id: int,
+    profile_name: str,
+    seasons: Optional[list[int]],
+    season_note: Optional[str],
+):
+    success, reason = await sonarr.add(result, seasons=seasons, quality_profile_id=profile_id)
+
+    if success:
+        if interaction.channel is not None:
+            embed = _request_card(interaction.user, result.title, result.year, result.overview, result.poster_url)
+            embed.add_field(name='Quality', value=profile_name, inline=True)
+            embed.add_field(name='Seasons', value=season_note or 'All seasons', inline=True)
+            await interaction.channel.send(embed=embed)
+    else:
+        desc = f'**{truncate(result.title, 200)}**'
+        if reason:
+            desc += f'\n_{reason}_'
+        await interaction.followup.send(
+            embed=discord.Embed(title='Could not request', description=desc, color=discord.Color.red()),
+            ephemeral=True,
+        )
+
+
+# ── Request builder views (quality [+ season] picker, then a Request button) ────
+
+class MovieRequestBuilderView(discord.ui.View):
+    def __init__(self, result: MovieResult, radarr: RadarrClient, profiles: list[dict]):
+        super().__init__(timeout=180)
+        self.result = result
+        self.radarr = radarr
+        self.profile_names = {p['id']: p['name'] for p in profiles}
+        self.profile_id = _default_profile_id(profiles, radarr.quality_profile_name)
+
+        options = [
+            discord.SelectOption(label=p['name'], value=str(p['id']), default=(p['id'] == self.profile_id))
+            for p in profiles[:25]
+        ]
+        select = discord.ui.Select(placeholder='Quality Profile', options=options, row=0)
+        select.callback = self._on_profile_select
+        self.add_item(select)
+
+    async def _on_profile_select(self, interaction: discord.Interaction):
+        self.profile_id = int(interaction.data['values'][0])
+        await interaction.response.defer()
+
+    @discord.ui.button(label='Request', style=discord.ButtonStyle.primary, row=1)
+    async def request(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(view=self)
+        profile_name = self.profile_names.get(self.profile_id, 'default')
+        await _finish_movie_request(interaction, self.radarr, self.result, self.profile_id, profile_name)
+
+
+class SeriesRequestBuilderView(discord.ui.View):
+    def __init__(self, result: SeriesResult, sonarr: SonarrClient, profiles: list[dict]):
+        super().__init__(timeout=180)
+        self.result = result
+        self.sonarr = sonarr
+        self.profile_names = {p['id']: p['name'] for p in profiles}
+        self.profile_id = _default_profile_id(profiles, sonarr.quality_profile_name)
+        self.seasons: Optional[list[int]] = None  # None = all seasons
+
+        profile_options = [
+            discord.SelectOption(label=p['name'], value=str(p['id']), default=(p['id'] == self.profile_id))
+            for p in profiles[:25]
+        ]
+        profile_select = discord.ui.Select(placeholder='Quality Profile', options=profile_options, row=0)
+        profile_select.callback = self._on_profile_select
+        self.add_item(profile_select)
+
+        season_numbers = _series_season_numbers(result)
+        if len(season_numbers) > 1:
+            season_options = [discord.SelectOption(label='All seasons', value='all', default=True)]
+            season_options += [
+                discord.SelectOption(label=_season_label(n), value=str(n))
+                for n in season_numbers[:24]  # Discord caps a select at 25 options total
+            ]
+            season_select = discord.ui.Select(
+                placeholder='Seasons', min_values=1, max_values=len(season_options), options=season_options, row=1
+            )
+            season_select.callback = self._on_season_select
+            self.add_item(season_select)
+
+    async def _on_profile_select(self, interaction: discord.Interaction):
+        self.profile_id = int(interaction.data['values'][0])
+        await interaction.response.defer()
+
+    async def _on_season_select(self, interaction: discord.Interaction):
+        values = interaction.data['values']
+        self.seasons = None if 'all' in values else sorted(int(v) for v in values)
+        await interaction.response.defer()
+
+    @discord.ui.button(label='Request', style=discord.ButtonStyle.primary, row=2)
+    async def request(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(view=self)
+        profile_name = self.profile_names.get(self.profile_id, 'default')
+        season_note = None if self.seasons is None else ', '.join(_season_label(n) for n in self.seasons)
+        await _finish_series_request(
+            interaction, self.sonarr, self.result, self.profile_id, profile_name, self.seasons, season_note
+        )
+
+
+# ── Search-result pickers ────────────────────────────────────────────────────────
 
 class MovieRequestView(discord.ui.View):
     def __init__(self, results: list[MovieResult], radarr: RadarrClient):
@@ -60,97 +221,20 @@ class MovieRequestView(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(view=self)
 
-        success, reason = await self.radarr.add(result)
+        if result.already_added:
+            await interaction.followup.send(embed=_already_added_embed(result.title, 'Radarr'), ephemeral=True)
+            return
 
-        if success:
-            if interaction.channel is not None:
-                await interaction.channel.send(
-                    embed=_request_card(
-                        interaction.user, result.title, result.year, result.overview, result.poster_url
-                    )
-                )
-        else:
-            desc = f'**{truncate(result.title, 200)}**'
-            if reason:
-                desc += f'\n_{reason}_'
-            await interaction.followup.send(
-                embed=discord.Embed(title='Could not request', description=desc, color=discord.Color.red()),
-                ephemeral=True,
-            )
+        try:
+            profiles = await self.radarr.list_quality_profiles()
+        except Exception as exc:
+            await interaction.followup.send(f'Failed to load quality profiles: {exc}', ephemeral=True)
+            return
 
-
-def _series_season_numbers(result: SeriesResult) -> list[int]:
-    return sorted(
-        {s.get('seasonNumber') for s in result.raw.get('seasons', []) if s.get('seasonNumber') is not None}
-    )
-
-
-def _season_label(n: int) -> str:
-    return 'Specials' if n == 0 else f'Season {n}'
-
-
-async def _complete_series_request(
-    interaction: discord.Interaction,
-    sonarr: SonarrClient,
-    result: SeriesResult,
-    seasons: Optional[list[int]],
-    season_note: Optional[str],
-):
-    success, reason = await sonarr.add(result, seasons=seasons)
-
-    if success:
-        if interaction.channel is not None:
-            embed = _request_card(
-                interaction.user, result.title, result.year, result.overview, result.poster_url
-            )
-            if season_note:
-                embed.add_field(name='Monitoring', value=season_note, inline=False)
-            await interaction.channel.send(embed=embed)
-    else:
-        desc = f'**{truncate(result.title, 200)}**'
-        if reason:
-            desc += f'\n_{reason}_'
+        embed = _media_embed(result.title, result.year, result.overview, result.poster_url)
         await interaction.followup.send(
-            embed=discord.Embed(title='Could not request', description=desc, color=discord.Color.red()),
-            ephemeral=True,
+            embed=embed, view=MovieRequestBuilderView(result, self.radarr, profiles), ephemeral=True
         )
-
-
-class SeasonSelectView(discord.ui.View):
-    def __init__(self, result: SeriesResult, sonarr: SonarrClient):
-        super().__init__(timeout=120)
-        self.result = result
-        self.sonarr = sonarr
-
-        options = [discord.SelectOption(label='All seasons', value='all', default=True)]
-        options += [
-            discord.SelectOption(label=_season_label(n), value=str(n))
-            for n in _series_season_numbers(result)[:24]  # Discord caps a select at 25 options total
-        ]
-        select = discord.ui.Select(
-            placeholder='Select season(s) to monitor…',
-            min_values=1,
-            max_values=len(options),
-            options=options,
-        )
-        select.callback = self._on_select
-        self.add_item(select)
-
-    async def _on_select(self, interaction: discord.Interaction):
-        values = interaction.data['values']
-
-        for child in self.children:
-            child.disabled = True
-        await interaction.response.edit_message(view=self)
-
-        if 'all' in values:
-            seasons, season_note = None, None
-        else:
-            numbers = sorted(int(v) for v in values)
-            seasons = numbers
-            season_note = ', '.join(_season_label(n) for n in numbers)
-
-        await _complete_series_request(interaction, self.sonarr, self.result, seasons, season_note)
 
 
 class SeriesRequestView(discord.ui.View):
@@ -179,18 +263,20 @@ class SeriesRequestView(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(view=self)
 
-        # Already-added or single-season shows have nothing to choose between —
-        # skip straight to adding rather than showing a pointless season picker.
-        if result.already_added or len(_series_season_numbers(result)) <= 1:
-            await _complete_series_request(interaction, self.sonarr, result, seasons=None, season_note=None)
+        if result.already_added:
+            await interaction.followup.send(embed=_already_added_embed(result.title, 'Sonarr'), ephemeral=True)
             return
 
-        embed = discord.Embed(
-            title=f'Which seasons of {truncate(result.title, 200)}?',
-            description='Pick one or more, or leave "All seasons" selected.',
-            color=discord.Color.gold(),
+        try:
+            profiles = await self.sonarr.list_quality_profiles()
+        except Exception as exc:
+            await interaction.followup.send(f'Failed to load quality profiles: {exc}', ephemeral=True)
+            return
+
+        embed = _media_embed(result.title, result.year, result.overview, result.poster_url)
+        await interaction.followup.send(
+            embed=embed, view=SeriesRequestBuilderView(result, self.sonarr, profiles), ephemeral=True
         )
-        await interaction.followup.send(embed=embed, view=SeasonSelectView(result, self.sonarr), ephemeral=True)
 
 
 class ConfirmRemoveView(discord.ui.View):
@@ -208,14 +294,14 @@ class ConfirmRemoveView(discord.ui.View):
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self._disable(interaction)
         success, reason = await self._remove()
-        color = discord.Color.green() if success else discord.Color.red()
-        title = 'Removed' if success else 'Could not remove'
-        desc = f'**{truncate(self._title, 200)}**'
-        if reason:
-            desc += f'\n_{reason}_'
-        await interaction.followup.send(
-            embed=discord.Embed(title=title, description=desc, color=color), ephemeral=True
-        )
+        if not success:
+            desc = f'**{truncate(self._title, 200)}**'
+            if reason:
+                desc += f'\n_{reason}_'
+            await interaction.followup.send(
+                embed=discord.Embed(title='Could not remove', description=desc, color=discord.Color.red()),
+                ephemeral=True,
+            )
 
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):

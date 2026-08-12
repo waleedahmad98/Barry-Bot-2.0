@@ -40,11 +40,14 @@ class RadarrClient(ArrClient):
             log.error(f'Failed to remove movie from Radarr: {exc}')
             return False, str(exc)
 
-    async def add(self, result: MovieResult) -> tuple[bool, Optional[str]]:
+    async def add(
+        self, result: MovieResult, quality_profile_id: Optional[int] = None
+    ) -> tuple[bool, Optional[str]]:
+        """`quality_profile_id` overrides the configured default profile for this add."""
         if result.already_added:
             return False, 'Already in Radarr.'
         try:
-            profile_id = await self.quality_profile_id()
+            profile_id = quality_profile_id if quality_profile_id is not None else await self.quality_profile_id()
         except Exception as exc:
             return False, str(exc)
 

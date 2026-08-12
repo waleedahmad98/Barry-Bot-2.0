@@ -41,14 +41,18 @@ class SonarrClient(ArrClient):
             return False, str(exc)
 
     async def add(
-        self, result: SeriesResult, seasons: Optional[list[int]] = None
+        self,
+        result: SeriesResult,
+        seasons: Optional[list[int]] = None,
+        quality_profile_id: Optional[int] = None,
     ) -> tuple[bool, Optional[str]]:
-        """Add a series. `seasons` restricts monitoring/search to those season numbers;
-        omit (or pass None) to monitor and search every season."""
+        """Add a series. `seasons` restricts monitoring/search to those season numbers
+        (omit/None to monitor and search every season). `quality_profile_id` overrides
+        the configured default profile for this add."""
         if result.already_added:
             return False, 'Already in Sonarr.'
         try:
-            profile_id = await self.quality_profile_id()
+            profile_id = quality_profile_id if quality_profile_id is not None else await self.quality_profile_id()
         except Exception as exc:
             return False, str(exc)
 

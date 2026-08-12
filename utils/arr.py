@@ -52,9 +52,14 @@ class ArrClient:
             log.warning(f'{type(self).__name__} connection failed: {exc}')
             return False
 
+    async def list_quality_profiles(self) -> list[dict]:
+        """[{'id': int, 'name': str}, ...] as configured in Radarr/Sonarr, in their configured order."""
+        profiles = await self._get('/api/v3/qualityprofile')
+        return [{'id': p['id'], 'name': p['name']} for p in profiles]
+
     async def quality_profile_id(self) -> int:
         if self._quality_profile_id is None:
-            profiles = await self._get('/api/v3/qualityprofile')
+            profiles = await self.list_quality_profiles()
             match = next(
                 (p for p in profiles if p['name'].lower() == self.quality_profile_name.lower()), None
             )
