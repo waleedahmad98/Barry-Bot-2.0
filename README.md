@@ -254,6 +254,10 @@ allowed_users:
 | `/dl_pause <name>` | Pause a torrent (partial name match) |
 | `/dl_resume <name>` | Resume a paused torrent |
 | `/dl_remove <name> [True]` | Remove a torrent; add `True` to also delete files |
+| `/delete_movie <title>` | Delete a movie downloaded via `/search`/`/download` from disk |
+| `/delete_show <title>` | Delete a show downloaded via `/search`/`/download` from disk |
+
+`/delete_movie` and `/delete_show` look directly at the top-level files/folders under `paths.movies`/`paths.shows`, match by partial name, and ask for confirmation before deleting — no Plex, Jellyfin, Radarr, or Sonarr involved. Use these for anything you grabbed manually through `/search`/`/download`; use `/remove_movie`/`/remove_show` instead for anything that went through a Radarr/Sonarr request.
 
 ### Requests (Radarr / Sonarr)
 

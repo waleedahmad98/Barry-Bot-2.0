@@ -7,7 +7,9 @@ from discord.ext import commands
 from utils.auth import require_auth
 from utils.helpers import format_size, format_state, progress_bar, truncate
 from utils.jackett import CATEGORIES, JackettClient, TorrentResult
+from utils.media_files import MediaEntry
 from utils.qbit import QBitClient
+from utils import media_files
 
 
 # ── Interactive views ──────────────────────────────────────────────────────────
@@ -98,6 +100,41 @@ class SearchResultsView(discord.ui.View):
         await interaction.followup.send(
             embed=embed, view=DownloadPathView(result, self.paths, self.qbit), ephemeral=True
         )
+
+
+class ConfirmFileDeleteView(discord.ui.View):
+    """Delete confirmation for a raw on-disk entry — no Plex/Jellyfin/Radarr/Sonarr involved."""
+
+    def __init__(self, entry: MediaEntry):
+        super().__init__(timeout=30)
+        self.entry = entry
+
+    async def _disable(self, interaction: discord.Interaction):
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(view=self)
+
+    @discord.ui.button(label='Yes, delete', style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._disable(interaction)
+        try:
+            await media_files.delete(self.entry)
+        except OSError as exc:
+            await interaction.followup.send(f'Deletion failed: {exc}', ephemeral=True)
+            return
+        await interaction.followup.send(
+            embed=discord.Embed(
+                title=f'Deleted: {self.entry.name}',
+                description=f'`{self.entry.path}`',
+                color=discord.Color.green(),
+            ),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label='Cancel', style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._disable(interaction)
+        await interaction.followup.send('Cancelled.', ephemeral=True)
 
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
@@ -344,6 +381,47 @@ class Torrents(commands.Cog):
         else:
             await qbit.resume(t.hash)
             await ctx.send(f'Resumed **{t.name}**.', ephemeral=True)
+
+    @commands.hybrid_command(name='delete_movie', description='Delete a downloaded movie from disk')
+    @app_commands.describe(title='Movie file/folder name (partial match ok)')
+    @require_auth()
+    async def delete_movie(self, ctx: commands.Context, *, title: str):
+        await self._delete_from_disk(ctx, 'movies', title)
+
+    @commands.hybrid_command(name='delete_show', description='Delete a downloaded show from disk')
+    @app_commands.describe(title='Show folder name (partial match ok)')
+    @require_auth()
+    async def delete_show(self, ctx: commands.Context, *, title: str):
+        await self._delete_from_disk(ctx, 'shows', title)
+
+    async def _delete_from_disk(self, ctx: commands.Context, category: str, title: str):
+        root = self.bot.config.get('paths', {}).get(category)
+        if not root:
+            await ctx.send(f'`paths.{category}` is not set in config.yaml.', ephemeral=True)
+            return
+
+        await ctx.defer(ephemeral=True)
+        matches = await media_files.find(root, title)
+
+        if not matches:
+            await ctx.send(f'Nothing matching "{title}" found in `{root}`.', ephemeral=True)
+            return
+        if len(matches) > 1:
+            listing = '\n'.join(f'- {m.name} ({format_size(m.size)})' for m in matches[:8])
+            await ctx.send(f'Multiple matches — be more specific:\n{listing}', ephemeral=True)
+            return
+
+        entry = matches[0]
+        embed = discord.Embed(
+            title=f'Delete {entry.name}?',
+            description=(
+                f'This will permanently delete `{entry.path}` ({format_size(entry.size)}) from disk.\n'
+                'This is a raw file from `/search` + `/download` — it isn\'t tracked by Plex, Jellyfin, '
+                'Radarr, or Sonarr, so deleting it here only removes it from disk.'
+            ),
+            color=discord.Color.red(),
+        )
+        await ctx.send(embed=embed, view=ConfirmFileDeleteView(entry), ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
