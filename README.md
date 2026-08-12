@@ -263,11 +263,13 @@ allowed_users:
 | Command | Description |
 |---|---|
 | `/request_movie <query>` | Search TMDB via Radarr → pick from dropdown → monitors it and searches automatically |
-| `/request_show <query>` | Search TVDB via Sonarr → pick from dropdown → monitors all seasons and searches automatically |
+| `/request_show <query>` | Search TVDB via Sonarr → pick from dropdown → pick season(s) → monitors and searches automatically |
 | `/remove_movie <title> [delete_files]` | Remove a movie from Radarr; deletes its files too unless `delete_files:False` |
 | `/remove_show <title> [delete_files]` | Remove a show from Sonarr; deletes its files too unless `delete_files:False` |
 
 Picking a result adds it to Radarr/Sonarr with the quality profile and root folder from `config.yaml`, turns on monitoring, and kicks off an automatic search — Radarr/Sonarr handle finding and grabbing the torrent themselves from there. If it's already in Radarr/Sonarr, the bot tells you instead of adding a duplicate.
+
+For shows, picking a title with more than one season shows a second dropdown to choose which season(s) to monitor — leave "All seasons" selected for the whole series, or pick one or more specific seasons (multi-select) to request just those. Shows with only one season skip straight to adding, since there's nothing to choose between. This is season-level only — Sonarr's own UI is still the place to monitor/search individual episodes.
 
 `/remove_movie` and `/remove_show` match by partial title (same "be more specific" behavior as the torrent commands if more than one matches), then ask for confirmation before actually removing anything. This is the only removal path in the bot — deleting is always routed through Radarr/Sonarr so monitoring is turned off at the same time the files go, instead of leaving something that Radarr/Sonarr will just re-download on its next search.
 

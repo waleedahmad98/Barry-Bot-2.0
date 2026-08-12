@@ -40,7 +40,11 @@ class SonarrClient(ArrClient):
             log.error(f'Failed to remove series from Sonarr: {exc}')
             return False, str(exc)
 
-    async def add(self, result: SeriesResult) -> tuple[bool, Optional[str]]:
+    async def add(
+        self, result: SeriesResult, seasons: Optional[list[int]] = None
+    ) -> tuple[bool, Optional[str]]:
+        """Add a series. `seasons` restricts monitoring/search to those season numbers;
+        omit (or pass None) to monitor and search every season."""
         if result.already_added:
             return False, 'Already in Sonarr.'
         try:
@@ -49,16 +53,23 @@ class SonarrClient(ArrClient):
             return False, str(exc)
 
         body = dict(result.raw)
-        seasons = body.get('seasons', [])
-        for season in seasons:
-            season['monitored'] = True
+        season_list = body.get('seasons', [])
+        if seasons is None:
+            for season in season_list:
+                season['monitored'] = True
+            monitor_option = 'all'
+        else:
+            wanted = set(seasons)
+            for season in season_list:
+                season['monitored'] = season.get('seasonNumber') in wanted
+            monitor_option = 'none'  # let the per-season 'monitored' flags above drive it
         body.update({
             'qualityProfileId': profile_id,
             'rootFolderPath': self.root_folder,
             'seasonFolder': True,
             'monitored': True,
-            'seasons': seasons,
-            'addOptions': {'monitor': 'all', 'searchForMissingEpisodes': True},
+            'seasons': season_list,
+            'addOptions': {'monitor': monitor_option, 'searchForMissingEpisodes': True},
         })
         try:
             await self._post('/api/v3/series', body)

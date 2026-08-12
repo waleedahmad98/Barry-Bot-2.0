@@ -79,6 +79,80 @@ class MovieRequestView(discord.ui.View):
             )
 
 
+def _series_season_numbers(result: SeriesResult) -> list[int]:
+    return sorted(
+        {s.get('seasonNumber') for s in result.raw.get('seasons', []) if s.get('seasonNumber') is not None}
+    )
+
+
+def _season_label(n: int) -> str:
+    return 'Specials' if n == 0 else f'Season {n}'
+
+
+async def _complete_series_request(
+    interaction: discord.Interaction,
+    sonarr: SonarrClient,
+    result: SeriesResult,
+    seasons: Optional[list[int]],
+    season_note: Optional[str],
+):
+    success, reason = await sonarr.add(result, seasons=seasons)
+
+    if success:
+        if interaction.channel is not None:
+            embed = _request_card(
+                interaction.user, result.title, result.year, result.overview, result.poster_url
+            )
+            if season_note:
+                embed.add_field(name='Monitoring', value=season_note, inline=False)
+            await interaction.channel.send(embed=embed)
+    else:
+        desc = f'**{truncate(result.title, 200)}**'
+        if reason:
+            desc += f'\n_{reason}_'
+        await interaction.followup.send(
+            embed=discord.Embed(title='Could not request', description=desc, color=discord.Color.red()),
+            ephemeral=True,
+        )
+
+
+class SeasonSelectView(discord.ui.View):
+    def __init__(self, result: SeriesResult, sonarr: SonarrClient):
+        super().__init__(timeout=120)
+        self.result = result
+        self.sonarr = sonarr
+
+        options = [discord.SelectOption(label='All seasons', value='all', default=True)]
+        options += [
+            discord.SelectOption(label=_season_label(n), value=str(n))
+            for n in _series_season_numbers(result)[:24]  # Discord caps a select at 25 options total
+        ]
+        select = discord.ui.Select(
+            placeholder='Select season(s) to monitor…',
+            min_values=1,
+            max_values=len(options),
+            options=options,
+        )
+        select.callback = self._on_select
+        self.add_item(select)
+
+    async def _on_select(self, interaction: discord.Interaction):
+        values = interaction.data['values']
+
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(view=self)
+
+        if 'all' in values:
+            seasons, season_note = None, None
+        else:
+            numbers = sorted(int(v) for v in values)
+            seasons = numbers
+            season_note = ', '.join(_season_label(n) for n in numbers)
+
+        await _complete_series_request(interaction, self.sonarr, self.result, seasons, season_note)
+
+
 class SeriesRequestView(discord.ui.View):
     def __init__(self, results: list[SeriesResult], sonarr: SonarrClient):
         super().__init__(timeout=120)
@@ -105,23 +179,18 @@ class SeriesRequestView(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(view=self)
 
-        success, reason = await self.sonarr.add(result)
+        # Already-added or single-season shows have nothing to choose between —
+        # skip straight to adding rather than showing a pointless season picker.
+        if result.already_added or len(_series_season_numbers(result)) <= 1:
+            await _complete_series_request(interaction, self.sonarr, result, seasons=None, season_note=None)
+            return
 
-        if success:
-            if interaction.channel is not None:
-                await interaction.channel.send(
-                    embed=_request_card(
-                        interaction.user, result.title, result.year, result.overview, result.poster_url
-                    )
-                )
-        else:
-            desc = f'**{truncate(result.title, 200)}**'
-            if reason:
-                desc += f'\n_{reason}_'
-            await interaction.followup.send(
-                embed=discord.Embed(title='Could not request', description=desc, color=discord.Color.red()),
-                ephemeral=True,
-            )
+        embed = discord.Embed(
+            title=f'Which seasons of {truncate(result.title, 200)}?',
+            description='Pick one or more, or leave "All seasons" selected.',
+            color=discord.Color.gold(),
+        )
+        await interaction.followup.send(embed=embed, view=SeasonSelectView(result, self.sonarr), ephemeral=True)
 
 
 class ConfirmRemoveView(discord.ui.View):
