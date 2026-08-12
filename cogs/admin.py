@@ -81,7 +81,7 @@ class Admin(commands.Cog):
         await ctx.send(embed=embed, ephemeral=True)
 
     @commands.hybrid_command(name='reload', description='Reload a bot cog')
-    @app_commands.describe(cog='Cog name: torrents, library, jellyfin, admin')
+    @app_commands.describe(cog='Cog name: torrents, library, jellyfin, requests, admin')
     async def reload(self, ctx: commands.Context, cog: str):
         if not self._is_owner(ctx.author):
             await ctx.send('Only the owner can reload cogs.', ephemeral=True)
@@ -136,6 +136,15 @@ class Admin(commands.Cog):
             else 'Not configured'
         )
         embed.add_field(name='Indexer', value=idx_val, inline=True)
+
+        radarr_cfg = cfg.get('radarr', {})
+        radarr_val = f'`{radarr_cfg.get("host")}:{radarr_cfg.get("port")}`' if radarr_cfg.get('api_key') else 'Not configured'
+        embed.add_field(name='Radarr', value=radarr_val, inline=True)
+
+        sonarr_cfg = cfg.get('sonarr', {})
+        sonarr_val = f'`{sonarr_cfg.get("host")}:{sonarr_cfg.get("port")}`' if sonarr_cfg.get('api_key') else 'Not configured'
+        embed.add_field(name='Sonarr', value=sonarr_val, inline=True)
+
         embed.add_field(name='Latency', value=f'{self.bot.latency * 1000:.1f} ms', inline=True)
 
         await ctx.send(embed=embed, ephemeral=True)

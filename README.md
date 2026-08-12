@@ -1,19 +1,20 @@
 # Media Bot (Base for Barry Bot) — Setup & Usage
 
-A Discord bot for managing torrents and browsing Plex/Jellyfin from your phone. Movie/show *requests* are handled by a separate companion bot, [Doplarr](#requesting-movies--shows-with-doplarr) — see that section below.
+A Discord bot for managing torrents, requesting movies/shows, and browsing Plex/Jellyfin from your phone.
 
 ---
 
 ## Prerequisites
 
 - Python 3.11+
-- [qBittorrent](https://www.qbittorrent.org/) with Web UI enabled — the download client `/search`/`/download` hand torrents to
-- [Jackett](https://github.com/Jackett/Jackett) or [Prowlarr](https://prowlarr.com/) — indexer proxy used by `/search`
+- [qBittorrent](https://www.qbittorrent.org/) with Web UI enabled — the download client everything else hands torrents to
+- [Jackett](https://github.com/Jackett/Jackett) or [Prowlarr](https://prowlarr.com/) — indexer proxy used directly by `/search`, and by Radarr/Sonarr for automatic requests
+- [Radarr](https://radarr.video/) (optional — needed for `/request_movie`)
+- [Sonarr](https://sonarr.tv/) (optional — needed for `/request_show`)
 - [Plex Media Server](https://www.plex.tv/) (optional — needed for `/movies` / `/shows`)
 - [Jellyfin](https://jellyfin.org/) (optional — needed for `/jf_movies` / `/jf_shows`)
-- [Radarr](https://radarr.video/) / [Sonarr](https://sonarr.tv/) (optional — only needed if you also set up Doplarr for requests; Barry Bot itself doesn't talk to them)
 
-You can run Plex, Jellyfin, both, or neither. Nothing here is mutually exclusive.
+You can run Plex, Jellyfin, both, or neither — same for Radarr/Sonarr vs. the manual `/search` flow. Nothing here is mutually exclusive.
 
 ---
 
@@ -113,6 +114,52 @@ indexer:
 
 For Prowlarr, change `type` to `prowlarr` and `port` to `9696`.
 
+### Radarr (optional — needed for `/request_movie`)
+
+1. Install Radarr: <https://wiki.servarr.com/radarr/installation>
+2. In Radarr, go to **Settings → Indexers** and add Jackett/Prowlarr as an indexer, and **Settings → Download Clients** and add qBittorrent — Radarr needs its own indexer/download-client hookup so it can search and grab automatically once you request something.
+3. Note the **Quality Profile** name you want new requests to use (**Settings → Profiles**) and the **Root Folder** path (**Settings → Media Management**) — these must match your config exactly.
+4. Copy the **API Key** from **Settings → General**.
+
+```yaml
+radarr:
+  host: "http://localhost"
+  port: 7878
+  api_key: "your-radarr-api-key"
+  quality_profile: "HD-1080p"     # must match a profile name in Radarr exactly
+  root_folder: "/movies"          # must match a root folder configured in Radarr exactly
+```
+
+### Sonarr (optional — needed for `/request_show`)
+
+Same idea as Radarr, for TV:
+
+1. Install Sonarr: <https://wiki.servarr.com/sonarr/installation>
+2. Hook up Jackett/Prowlarr as an indexer and qBittorrent as a download client in Sonarr too.
+3. Note the Quality Profile name and Root Folder path.
+4. Copy the API Key from **Settings → General**.
+
+```yaml
+sonarr:
+  host: "http://localhost"
+  port: 8989
+  api_key: "your-sonarr-api-key"
+  quality_profile: "HD-1080p"     # must match a profile name in Sonarr exactly
+  root_folder: "/shows"           # must match a root folder configured in Sonarr exactly
+```
+
+Requests made through `/request_movie` and `/request_show` monitor the item and trigger an automatic search in Radarr/Sonarr — the bot doesn't touch qBittorrent directly for these; Radarr/Sonarr do that themselves using the indexer/download-client setup above. The bot's `/search` and `/download` commands remain a separate, manual path for one-off torrents that aren't a "monitor this permanently" request.
+
+#### Download/import notifications (optional)
+
+Barry Bot only posts a notification when a request is *placed* (a "Requested by …" card) — it has no visibility into what happens in Radarr/Sonarr afterwards. To get a message when something actually finishes downloading and gets imported, use Radarr/Sonarr's **own** built-in Discord notifications (no bot config involved):
+
+1. In Discord, go to the channel you want notifications in → **Edit Channel → Integrations → Webhooks → New Webhook**. Copy its **Webhook URL**.
+2. In Radarr, go to **Settings → Connect → + → Discord**. Paste the webhook URL, give it a name, and under **Notification Triggers** check **only "On File Import" / "On Import Complete"**. Leave **"On Movie Added"** and **"On Grab"** unchecked — the bot's own request card already covers "someone requested this," and "On Grab" just means a download started, not that it's actually available yet. Save.
+3. Repeat step 2 in Sonarr with its own **Settings → Connect → Discord** entry (its equivalent trigger is **"On Import"**, with **"On Series Add"** and **"On Grab"** left unchecked) — Radarr and Sonarr each need this configured separately, and you can point them at the same webhook URL or different channels.
+
+With only the import trigger enabled, you get exactly two messages per request: the bot's "Requested by …" card up front, and Radarr/Sonarr's own import notification once it's actually downloaded and available — no duplicate "added" message in between. These import messages come from Radarr/Sonarr directly (their own username/avatar and formatting), separate from Barry Bot's request card — that's expected, since it's Radarr/Sonarr reporting on their own work rather than the bot.
+
 ### Jellyfin (optional)
 
 Get an API key and your user ID:
@@ -195,7 +242,7 @@ allowed_users:
 
 ## 7. Command Reference
 
-> **Privacy note:** This bot is slash-command only. All bot replies (search results, dropdowns, status messages, etc.) are private/ephemeral — only visible to the person who ran the command, so the channel doesn't get cluttered. The one exception: once a download actually starts, the bot posts a short public notification to the channel — "📥 @user started a download: **Title**" — so everyone can see what's being grabbed. (Doplarr has its own separate notification behavior for requests — see its section below.)
+> **Privacy note:** This bot is slash-command only. All bot replies (search results, dropdowns, status messages, etc.) are private/ephemeral — only visible to the person who ran the command, so the channel doesn't get cluttered. The one exception: once a download actually starts or a request is placed, the bot posts a short public notification to the channel — a plain "📥 @user started a download: **Title**" line for torrent downloads, or a "Requested by …" card (poster, title, overview) for `/request_movie` / `/request_show` — so everyone can see what's being grabbed.
 
 ### Torrents
 
@@ -209,7 +256,24 @@ allowed_users:
 | `/dl_remove <name> [True]` | Remove a torrent; add `True` to also delete files |
 | `/delete_from_disk <title> [movies\|shows]` | Delete a movie or show downloaded via `/search`/`/download` from disk |
 
-`/delete_from_disk` looks directly at the top-level files/folders under `paths.movies`/`paths.shows` (`category` picks which, defaults to `movies`), matches by partial name, and asks for confirmation before deleting — no Plex, Jellyfin, Radarr, or Sonarr involved. A successful delete is silent (buttons just gray out); you'll only hear from the bot if it fails. Use this only for things grabbed manually through `/search`/`/download` — anything requested through Doplarr belongs to Radarr/Sonarr, so remove it there (or via Doplarr) instead, so monitoring gets turned off along with the files.
+`/delete_from_disk` looks directly at the top-level files/folders under `paths.movies`/`paths.shows` (`category` picks which, defaults to `movies`), matches by partial name, and asks for confirmation before deleting — no Plex, Jellyfin, Radarr, or Sonarr involved. Like the Radarr/Sonarr removal commands, a successful delete is silent (buttons just gray out); you'll only hear from the bot if it fails. Use this for anything grabbed manually through `/search`/`/download`; use `/remove_movie`/`/remove_show` instead for anything that went through a Radarr/Sonarr request.
+
+### Requests (Radarr / Sonarr)
+
+| Command | Description |
+|---|---|
+| `/request_movie <query>` | Search TMDB via Radarr → pick from dropdown → pick quality → Request |
+| `/request_show <query>` | Search TVDB via Sonarr → pick from dropdown → pick quality/season(s) → Request |
+| `/remove_movie <title> [delete_files]` | Remove a movie from Radarr; deletes its files too unless `delete_files:False` |
+| `/remove_show <title> [delete_files]` | Remove a show from Sonarr; deletes its files too unless `delete_files:False` |
+
+Picking a title from the dropdown doesn't add it right away — it opens a second, private message with a **Quality Profile** picker (defaulting to `radarr.quality_profile`/`sonarr.quality_profile` from `config.yaml`, but overridable per request from whatever profiles actually exist in Radarr/Sonarr) and a **Request** button. Nothing is added to Radarr/Sonarr until you press it. If the title is already in Radarr/Sonarr, the bot tells you immediately instead of showing the picker.
+
+For shows with more than one season, that same message also has a **Seasons** picker (multi-select) — leave "All seasons" selected for the whole series, or pick one or more specific seasons to request just those. Shows with only one season skip that picker, since there's nothing to choose between. This is season-level only — Sonarr's own UI is still the place to monitor/search individual episodes.
+
+Once you press Request, Radarr/Sonarr take it from there — they turn on monitoring for what you picked, using the root folder from `config.yaml`, and kick off an automatic search; the bot doesn't touch qBittorrent directly for these.
+
+`/remove_movie` and `/remove_show` match by partial title (same "be more specific" behavior as the torrent commands if more than one matches), then ask for confirmation before actually removing anything — success is silent (buttons just gray out); you'll only hear from the bot if it *fails*. This is the only removal path in the bot — deleting is always routed through Radarr/Sonarr so monitoring is turned off at the same time the files go, instead of leaving something that Radarr/Sonarr will just re-download on its next search.
 
 ### Plex Library
 
@@ -227,7 +291,7 @@ allowed_users:
 | `/jf_shows [query]` | List all TV shows, or search by title |
 | `/jf_recent` | Show recently added media |
 
-Both library sections are browse-only — Barry Bot has no removal command. For something grabbed manually via `/search`/`/download`, use `/delete_from_disk`; for anything Radarr/Sonarr manages, remove it from their own UI (or however Doplarr exposes it) so monitoring stays in sync with what's actually on disk.
+Both library sections are browse-only — to remove something, use `/remove_movie` / `/remove_show` (Requests section above), which removes it from Radarr/Sonarr and deletes the files, keeping monitoring state in sync with what's actually on disk.
 
 ### Admin
 
@@ -250,101 +314,9 @@ The bot is built with cogs — each feature is a self-contained file in `cogs/`.
 1. Create `cogs/myfeature.py` following the pattern of any existing cog.
 2. Add it to the `cogs` list in `bot.py`:
    ```python
-   for cog in ('cogs.torrents', 'cogs.library', 'cogs.jellyfin', 'cogs.admin', 'cogs.myfeature'):
+   for cog in ('cogs.torrents', 'cogs.library', 'cogs.jellyfin', 'cogs.requests', 'cogs.admin', 'cogs.myfeature'):
    ```
 3. Reload without restarting: `/reload myfeature`
-
----
-
-## Requesting Movies & Shows with Doplarr
-
-Movie/show requests (search TMDB/TVDB, pick a quality profile, pick seasons, monitor + auto-search in Radarr/Sonarr) aren't a Barry Bot feature — that job is handled by [Doplarr](https://github.com/kiranshila/doplarr_rs), a separate, purpose-built Discord bot that runs alongside Barry Bot as its own process. It needs its **own** Discord application/bot token (Barry Bot's token won't work for it) and its own container.
-
-> This section is based on Doplarr's Rust rewrite (`doplarr_rs`) — the original Clojure version is no longer developed. Config field names can change between releases, so treat `config.example.toml` in that repo as the source of truth if anything here looks out of date.
-
-### 1. Create a second Discord bot
-
-Doplarr needs its own application, separate from Barry Bot's:
-
-1. Go to <https://discord.com/developers/applications> → **New Application** → name it (e.g. *Doplarr*).
-2. Open the **Bot** tab → **Reset Token** → copy it.
-3. **OAuth2 → URL Generator**: scopes `bot` + `applications.commands`; permission `Send Messages` (only needed if you want public request announcements — see `public_followup` below).
-4. Open the generated URL and invite it to the same server as Barry Bot.
-
-### 2. Configure it
-
-Create `config.toml` next to wherever you run Doplarr:
-
-```toml
-discord_token = "YOUR_DOPLARR_BOT_TOKEN"
-
-# true = successful requests post publicly in the channel; false = fully ephemeral
-public_followup = true
-
-[[backends]]
-media = "movie"                 # becomes the slash command: /request movie
-[backends.config.Radarr]
-url = "http://localhost:7878"
-api_key = "your-radarr-api-key"
-quality_profile = "HD-1080p"    # optional — omit to let requesters pick at request time
-rootfolder = "/movies"          # optional, same idea
-minimum_availability = "announced"  # optional: tba | announced | inCinemas | released
-
-[[backends]]
-media = "series"                # becomes: /request series
-[backends.config.Sonarr]
-url = "http://localhost:8989"
-api_key = "your-sonarr-api-key"
-quality_profile = "HD-1080p"    # optional
-rootfolder = "/shows"           # optional
-allow_specials = false          # optional: offer Season 0 in the season picker
-allow_all_seasons = true        # optional: offer an "All Seasons" option
-```
-
-Both `[backends.config.Radarr]`/`[backends.config.Sonarr]` blocks are otherwise identical to what Barry Bot used to need — same API keys, same requirement that `quality_profile`/`rootfolder` match Radarr/Sonarr exactly if you set them. Leaving them out isn't a fallback-to-default like Barry Bot's version was — Doplarr instead asks the requester to pick at request time, every time.
-
-Radarr/Sonarr also still need their own indexer (Jackett/Prowlarr) and download client (qBittorrent) configured under their own Settings — same requirement as before, unrelated to Doplarr or Barry Bot.
-
-Values can pull from environment variables instead of being written in plaintext: `api_key = "${RADARR_API_KEY}"`.
-
-### 3. Run it
-
-```yaml
-# docker-compose.yml
-services:
-  doplarr:
-    image: ghcr.io/activexray/doplarr_rs:latest
-    container_name: doplarr
-    restart: unless-stopped
-    volumes:
-      - ./config.toml:/config.toml:ro
-```
-
-```bash
-docker compose up -d
-docker compose logs -f doplarr   # confirm it connected and registered /request
-```
-
-### Download/import notifications (optional)
-
-Doplarr's own notifications only cover the request being placed (and only if `public_followup = true`) — it has no visibility into what happens in Radarr/Sonarr afterwards, same limitation Barry Bot had. For a message when something actually finishes downloading, use Radarr/Sonarr's own built-in Discord notifications:
-
-1. In Discord: **Edit Channel → Integrations → Webhooks → New Webhook** → copy the URL.
-2. In Radarr: **Settings → Connect → + → Discord** → paste the webhook URL → under **Notification Triggers** check **only "On Import"**. Leave "On Movie Added" and "On Grab" unchecked so you don't get a duplicate ping before anything's actually available.
-3. Repeat in Sonarr's own **Settings → Connect → Discord** (same idea — only its "On Import" trigger).
-
-### Doplarr Troubleshooting
-
-**`/request` not appearing at all**
-- Check `docker compose logs doplarr` for a connection/token error, and that it's using its own bot token, not Barry Bot's.
-- New global slash commands can take a few minutes to show up — same client-cache caveat as Barry Bot's commands.
-
-**Request fails or "not found" errors**
-- `quality_profile`/`rootfolder`, if set, must match a profile name / root folder path *exactly* as configured in Radarr/Sonarr — check **Settings → Profiles** and **Settings → Media Management** there.
-- Confirm `api_key` and that Doplarr's container can actually reach Radarr/Sonarr's `url` (containers on different Docker networks are a common cause).
-
-**Request succeeds but nothing downloads**
-- That's a Radarr/Sonarr-side problem, not Doplarr — check they have a working indexer and download client configured under their own Settings.
 
 ---
 
@@ -369,4 +341,7 @@ Doplarr's own notifications only cover the request being placed (and only if `pu
 - Confirm the API key and `user_id` are correct — `user_id` must be an actual Jellyfin user's ID (usually your admin account), not the API key itself.
 - Test it directly: `http://localhost:8096/System/Info?api_key=YOUR_KEY` should return JSON, not an error.
 
-**`/request` not working** — that's Doplarr, a separate bot; see [Doplarr Troubleshooting](#doplarr-troubleshooting) above.
+**`/request_movie` or `/request_show` failing**
+- Check `radarr.api_key` / `sonarr.api_key` and that the bot can reach the host/port.
+- `quality_profile` and `root_folder` must match an existing profile name and root folder path *exactly* as configured in Radarr/Sonarr — check **Settings → Profiles** and **Settings → Media Management** there if you get a "not found" error.
+- If the request goes through but nothing downloads, the problem is on the Radarr/Sonarr side — check that they have a working indexer (Jackett/Prowlarr) and download client (qBittorrent) configured under their own Settings, since the bot doesn't touch qBittorrent for requests.
