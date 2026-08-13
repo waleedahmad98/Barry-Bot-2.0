@@ -6,31 +6,30 @@ from discord.ext import commands
 
 from utils.auth import require_auth
 from utils.helpers import truncate
-from utils.plex_client import MediaItem, PlexClient
+from utils.jellyfin import JellyfinClient, MediaItem
 
 
-class Library(commands.Cog):
+class Jellyfin(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self._plex: Optional[PlexClient] = None
+        self._jellyfin: Optional[JellyfinClient] = None
 
-    async def _build_plex(self) -> Optional[PlexClient]:
-        if self._plex is None:
-            cfg = self.bot.config.get('plex', {})
-            if cfg.get('token'):
-                client = PlexClient(
+    async def _build_jellyfin(self) -> Optional[JellyfinClient]:
+        if self._jellyfin is None:
+            cfg = self.bot.config.get('jellyfin', {})
+            if cfg.get('api_key') and cfg.get('user_id'):
+                client = JellyfinClient(
                     host=cfg.get('host', 'http://localhost'),
-                    port=int(cfg.get('port', 32400)),
-                    token=cfg['token'],
-                    movies_section=cfg.get('movies_section', 'Movies'),
-                    shows_section=cfg.get('shows_section', 'TV Shows'),
+                    port=int(cfg.get('port', 8096)),
+                    api_key=cfg['api_key'],
+                    user_id=cfg['user_id'],
                 )
                 if await client.connect():
-                    self._plex = client
-        return self._plex
+                    self._jellyfin = client
+        return self._jellyfin
 
     def _build_embed(self, title: str, items: list[MediaItem]) -> discord.Embed:
-        embed = discord.Embed(title=title, color=discord.Color.purple())
+        embed = discord.Embed(title=title, color=discord.Color.teal())
         for item in items[:15]:
             year = f' ({item.year})' if item.year else ''
             rating = f' ⭐ {item.rating:.1f}' if item.rating else ''
@@ -44,19 +43,22 @@ class Library(commands.Cog):
             embed.set_footer(text=f'Showing 15 of {len(items)}')
         return embed
 
-    @commands.hybrid_command(name='movies', description='List or search movies in Plex')
+    @commands.hybrid_command(name='jf_movies', description='List or search movies in Jellyfin')
     @app_commands.describe(query='Title to search (leave blank for full list)')
     @require_auth()
-    async def movies(self, ctx: commands.Context, *, query: str = ''):
-        plex = await self._build_plex()
-        if not plex:
-            await ctx.send('Plex is not configured or unavailable. Set `plex.token` in config.yaml.', ephemeral=True)
+    async def jf_movies(self, ctx: commands.Context, *, query: str = ''):
+        jellyfin = await self._build_jellyfin()
+        if not jellyfin:
+            await ctx.send(
+                'Jellyfin is not configured or unavailable. Set `jellyfin.api_key` and `jellyfin.user_id` in config.yaml.',
+                ephemeral=True,
+            )
             return
         await ctx.defer(ephemeral=True)
         try:
-            items = await plex.get_movies(query)
+            items = await jellyfin.get_movies(query)
         except Exception as exc:
-            await ctx.send(f'Plex error: {exc}', ephemeral=True)
+            await ctx.send(f'Jellyfin error: {exc}', ephemeral=True)
             return
         if not items:
             await ctx.send('No movies found.', ephemeral=True)
@@ -64,19 +66,22 @@ class Library(commands.Cog):
         label = f'Movies matching "{query}"' if query else 'Movies'
         await ctx.send(embed=self._build_embed(f'{label} ({len(items)})', items), ephemeral=True)
 
-    @commands.hybrid_command(name='shows', description='List or search TV shows in Plex')
+    @commands.hybrid_command(name='jf_shows', description='List or search TV shows in Jellyfin')
     @app_commands.describe(query='Title to search (leave blank for full list)')
     @require_auth()
-    async def shows(self, ctx: commands.Context, *, query: str = ''):
-        plex = await self._build_plex()
-        if not plex:
-            await ctx.send('Plex is not configured or unavailable. Set `plex.token` in config.yaml.', ephemeral=True)
+    async def jf_shows(self, ctx: commands.Context, *, query: str = ''):
+        jellyfin = await self._build_jellyfin()
+        if not jellyfin:
+            await ctx.send(
+                'Jellyfin is not configured or unavailable. Set `jellyfin.api_key` and `jellyfin.user_id` in config.yaml.',
+                ephemeral=True,
+            )
             return
         await ctx.defer(ephemeral=True)
         try:
-            items = await plex.get_shows(query)
+            items = await jellyfin.get_shows(query)
         except Exception as exc:
-            await ctx.send(f'Plex error: {exc}', ephemeral=True)
+            await ctx.send(f'Jellyfin error: {exc}', ephemeral=True)
             return
         if not items:
             await ctx.send('No shows found.', ephemeral=True)
@@ -84,18 +89,18 @@ class Library(commands.Cog):
         label = f'Shows matching "{query}"' if query else 'TV Shows'
         await ctx.send(embed=self._build_embed(f'{label} ({len(items)})', items), ephemeral=True)
 
-    @commands.hybrid_command(name='recent', description='Show recently added media in Plex')
+    @commands.hybrid_command(name='jf_recent', description='Show recently added media in Jellyfin')
     @require_auth()
-    async def recent(self, ctx: commands.Context):
-        plex = await self._build_plex()
-        if not plex:
-            await ctx.send('Plex is not configured or unavailable.', ephemeral=True)
+    async def jf_recent(self, ctx: commands.Context):
+        jellyfin = await self._build_jellyfin()
+        if not jellyfin:
+            await ctx.send('Jellyfin is not configured or unavailable.', ephemeral=True)
             return
         await ctx.defer(ephemeral=True)
         try:
-            items = await plex.recently_added(count=10)
+            items = await jellyfin.recently_added(count=10)
         except Exception as exc:
-            await ctx.send(f'Plex error: {exc}', ephemeral=True)
+            await ctx.send(f'Jellyfin error: {exc}', ephemeral=True)
             return
         if not items:
             await ctx.send('Nothing recently added.', ephemeral=True)
@@ -104,4 +109,4 @@ class Library(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(Library(bot))
+    await bot.add_cog(Jellyfin(bot))

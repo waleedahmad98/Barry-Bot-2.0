@@ -21,7 +21,7 @@ class Admin(commands.Cog):
             if ctx.interaction:
                 await ctx.interaction.response.send_message(msg, ephemeral=True)
             else:
-                await ctx.send(msg)
+                await ctx.send(msg, ephemeral=True)
             return False
         return commands.check(predicate)
 
@@ -29,26 +29,38 @@ class Admin(commands.Cog):
     @app_commands.describe(user='User to add to the allowlist')
     async def allow(self, ctx: commands.Context, user: discord.User):
         if not self._is_owner(ctx.author):
-            await ctx.send('Only the owner can manage the allowlist.')
+            await ctx.send('Only the owner can manage the allowlist.', ephemeral=True)
             return
         add_user(user.id)
-        await ctx.send(f'Added {user.mention} to the allowlist.', allowed_mentions=discord.AllowedMentions.none())
+        await ctx.send(
+            f'Added {user.mention} to the allowlist.',
+            allowed_mentions=discord.AllowedMentions.none(),
+            ephemeral=True,
+        )
 
     @commands.hybrid_command(name='deny', description='Remove a user from the allowlist')
     @app_commands.describe(user='User to remove')
     async def deny(self, ctx: commands.Context, user: discord.User):
         if not self._is_owner(ctx.author):
-            await ctx.send('Only the owner can manage the allowlist.')
+            await ctx.send('Only the owner can manage the allowlist.', ephemeral=True)
             return
         if remove_user(user.id):
-            await ctx.send(f'Removed {user.mention} from the allowlist.', allowed_mentions=discord.AllowedMentions.none())
+            await ctx.send(
+                f'Removed {user.mention} from the allowlist.',
+                allowed_mentions=discord.AllowedMentions.none(),
+                ephemeral=True,
+            )
         else:
-            await ctx.send(f'{user.mention} is not in the dynamic allowlist.', allowed_mentions=discord.AllowedMentions.none())
+            await ctx.send(
+                f'{user.mention} is not in the dynamic allowlist.',
+                allowed_mentions=discord.AllowedMentions.none(),
+                ephemeral=True,
+            )
 
     @commands.hybrid_command(name='allowed', description='Show all users allowed to use the bot')
     async def allowed(self, ctx: commands.Context):
         if not is_authorized(self.bot, ctx.author):
-            await ctx.send('Not authorized.')
+            await ctx.send('Not authorized.', ephemeral=True)
             return
 
         cfg = self.bot.config
@@ -62,37 +74,37 @@ class Admin(commands.Cog):
         if static:
             embed.add_field(name='Config (static)', value=' '.join(f'<@{u}>' for u in sorted(static)), inline=False)
         if dynamic:
-            embed.add_field(name='Added via !allow', value=' '.join(f'<@{u}>' for u in sorted(dynamic)), inline=False)
+            embed.add_field(name='Added via /allow', value=' '.join(f'<@{u}>' for u in sorted(dynamic)), inline=False)
         if not (owner_id or static or dynamic):
             embed.description = 'No users configured.'
 
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, ephemeral=True)
 
     @commands.hybrid_command(name='reload', description='Reload a bot cog')
-    @app_commands.describe(cog='Cog name: torrents, library, rss, admin')
+    @app_commands.describe(cog='Cog name: torrents, library, jellyfin, requests, admin')
     async def reload(self, ctx: commands.Context, cog: str):
         if not self._is_owner(ctx.author):
-            await ctx.send('Only the owner can reload cogs.')
+            await ctx.send('Only the owner can reload cogs.', ephemeral=True)
             return
         try:
             await self.bot.reload_extension(f'cogs.{cog}')
-            await ctx.send(f'Reloaded `cogs.{cog}`.')
+            await ctx.send(f'Reloaded `cogs.{cog}`.', ephemeral=True)
         except Exception as exc:
-            await ctx.send(f'Failed to reload: {exc}')
+            await ctx.send(f'Failed to reload: {exc}', ephemeral=True)
 
     @commands.hybrid_command(name='sync', description='Sync slash commands with Discord')
     async def sync(self, ctx: commands.Context):
         if not self._is_owner(ctx.author):
-            await ctx.send('Only the owner can sync commands.')
+            await ctx.send('Only the owner can sync commands.', ephemeral=True)
             return
         synced = await self.bot.tree.sync()
-        await ctx.send(f'Synced {len(synced)} slash command(s).')
+        await ctx.send(f'Synced {len(synced)} slash command(s).', ephemeral=True)
 
     @commands.hybrid_command(name='ping', description='Check bot latency')
     async def ping(self, ctx: commands.Context):
         if not is_authorized(self.bot, ctx.author):
             return
-        await ctx.send(f'Pong! `{self.bot.latency * 1000:.1f} ms`')
+        await ctx.send(f'Pong! `{self.bot.latency * 1000:.1f} ms`', ephemeral=True)
 
     @commands.hybrid_command(name='status', description='Show bot and service status')
     async def status(self, ctx: commands.Context):
@@ -113,6 +125,10 @@ class Admin(commands.Cog):
         plex_val = f'`{plex_cfg.get("host")}:{plex_cfg.get("port")}`' if plex_cfg.get('token') else 'Not configured'
         embed.add_field(name='Plex', value=plex_val, inline=True)
 
+        jf_cfg = cfg.get('jellyfin', {})
+        jf_val = f'`{jf_cfg.get("host")}:{jf_cfg.get("port")}`' if jf_cfg.get('api_key') else 'Not configured'
+        embed.add_field(name='Jellyfin', value=jf_val, inline=True)
+
         idx_cfg = cfg.get('indexer', {})
         idx_val = (
             f'{idx_cfg.get("type", "").capitalize()} `{idx_cfg.get("host")}:{idx_cfg.get("port")}`'
@@ -121,12 +137,17 @@ class Admin(commands.Cog):
         )
         embed.add_field(name='Indexer', value=idx_val, inline=True)
 
-        from cogs.rss import _load_feeds
-        rss_feeds = _load_feeds()
-        embed.add_field(name='RSS feeds', value=str(len(rss_feeds)), inline=True)
+        radarr_cfg = cfg.get('radarr', {})
+        radarr_val = f'`{radarr_cfg.get("host")}:{radarr_cfg.get("port")}`' if radarr_cfg.get('api_key') else 'Not configured'
+        embed.add_field(name='Radarr', value=radarr_val, inline=True)
+
+        sonarr_cfg = cfg.get('sonarr', {})
+        sonarr_val = f'`{sonarr_cfg.get("host")}:{sonarr_cfg.get("port")}`' if sonarr_cfg.get('api_key') else 'Not configured'
+        embed.add_field(name='Sonarr', value=sonarr_val, inline=True)
+
         embed.add_field(name='Latency', value=f'{self.bot.latency * 1000:.1f} ms', inline=True)
 
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
