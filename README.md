@@ -345,3 +345,6 @@ The bot is built with cogs — each feature is a self-contained file in `cogs/`.
 - Check `radarr.api_key` / `sonarr.api_key` and that the bot can reach the host/port.
 - `quality_profile` and `root_folder` must match an existing profile name and root folder path *exactly* as configured in Radarr/Sonarr — check **Settings → Profiles** and **Settings → Media Management** there if you get a "not found" error.
 - If the request goes through but nothing downloads, the problem is on the Radarr/Sonarr side — check that they have a working indexer (Jackett/Prowlarr) and download client (qBittorrent) configured under their own Settings, since the bot doesn't touch qBittorrent for requests.
+
+**`/request_show` with specific seasons picked, but they show up unmonitored in Sonarr**
+- Should be fixed already (the bot now sets season monitoring in a follow-up update after adding, rather than relying on Sonarr's add-time `monitor` option, which turned out to override rather than respect per-season selections). If you still see this, check the bot's logs for `failed to set season monitoring` — that means the series was added but the follow-up PUT to Sonarr failed, in which case go into Sonarr's own **Season Pass** view and monitor the season(s) manually, then trigger a search.
