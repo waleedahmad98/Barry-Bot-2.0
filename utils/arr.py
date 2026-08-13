@@ -35,6 +35,15 @@ class ArrClient:
                     raise RuntimeError(f'{path} failed ({resp.status}): {text}')
                 return await resp.json()
 
+    async def _put(self, path: str, json_body: dict):
+        timeout = aiohttp.ClientTimeout(total=20)
+        async with aiohttp.ClientSession(timeout=timeout, headers=self._headers()) as session:
+            async with session.put(f'{self.base_url}{path}', json=json_body) as resp:
+                if resp.status not in (200, 202):
+                    text = await resp.text()
+                    raise RuntimeError(f'{path} failed ({resp.status}): {text}')
+                return await resp.json()
+
     async def _delete(self, path: str, params: Optional[dict] = None):
         timeout = aiohttp.ClientTimeout(total=20)
         async with aiohttp.ClientSession(timeout=timeout, headers=self._headers()) as session:

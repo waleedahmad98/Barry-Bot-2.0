@@ -48,7 +48,14 @@ class SonarrClient(ArrClient):
     ) -> tuple[bool, Optional[str]]:
         """Add a series. `seasons` restricts monitoring/search to those season numbers
         (omit/None to monitor and search every season). `quality_profile_id` overrides
-        the configured default profile for this add."""
+        the configured default profile for this add.
+
+        This adds with nothing monitored, then does a follow-up PUT to set exact
+        per-season monitoring before triggering a search — Sonarr's addOptions.monitor
+        value ('all'/'none'/etc.) overrides whatever 'monitored' flags are sent on the
+        `seasons` array at creation time rather than respecting them, so a custom season
+        selection has to be applied as a separate update after the series exists (the
+        same two-step process Sonarr's own "Season Pass" UI uses)."""
         if result.already_added:
             return False, 'Already in Sonarr.'
         try:
@@ -57,30 +64,33 @@ class SonarrClient(ArrClient):
             return False, str(exc)
 
         body = dict(result.raw)
-        season_list = body.get('seasons', [])
-        if seasons is None:
-            for season in season_list:
-                season['monitored'] = True
-            monitor_option = 'all'
-        else:
-            wanted = set(seasons)
-            for season in season_list:
-                season['monitored'] = season.get('seasonNumber') in wanted
-            monitor_option = 'none'  # let the per-season 'monitored' flags above drive it
         body.update({
             'qualityProfileId': profile_id,
             'rootFolderPath': self.root_folder,
             'seasonFolder': True,
             'monitored': True,
-            'seasons': season_list,
-            'addOptions': {'monitor': monitor_option, 'searchForMissingEpisodes': True},
+            'addOptions': {'monitor': 'none', 'searchForMissingEpisodes': False},
         })
         try:
-            await self._post('/api/v3/series', body)
-            return True, None
+            created = await self._post('/api/v3/series', body)
         except Exception as exc:
             log.error(f'Failed to add series to Sonarr: {exc}')
             return False, str(exc)
+
+        wanted = None if seasons is None else set(seasons)
+        for season in created.get('seasons', []):
+            season['monitored'] = True if wanted is None else season.get('seasonNumber') in wanted
+        created['monitored'] = True
+
+        series_id = created.get('id')
+        try:
+            await self._put(f'/api/v3/series/{series_id}', created)
+            await self._post('/api/v3/command', {'name': 'SeriesSearch', 'seriesId': series_id})
+        except Exception as exc:
+            log.error(f'Series added to Sonarr but failed to set season monitoring: {exc}')
+            return False, f'Added, but failed to set season monitoring: {exc}'
+
+        return True, None
 
     def _map(self, r: dict) -> SeriesResult:
         return SeriesResult(
