@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Optional
@@ -28,6 +29,18 @@ class SonarrClient(ArrClient):
         """All series currently in Sonarr (for locating one to remove)."""
         results = await self._get('/api/v3/series')
         return [self._map(r) for r in results]
+
+    async def _wait_for_episodes(self, series_id: int, attempts: int = 8, delay: float = 1.5) -> list[dict]:
+        """Episode records are populated by an async refresh job right after a series is
+        created — they aren't necessarily there yet the instant the add call returns, so
+        poll briefly instead of assuming a single immediate fetch will see them."""
+        for attempt in range(attempts):
+            episodes = await self._get('/api/v3/episode', params={'seriesId': series_id})
+            if episodes:
+                return episodes
+            if attempt < attempts - 1:
+                await asyncio.sleep(delay)
+        return []
 
     async def remove(self, series_id: int, delete_files: bool = True) -> tuple[bool, Optional[str]]:
         try:
@@ -60,8 +73,12 @@ class SonarrClient(ArrClient):
         The season-level 'monitored' flag set via that PUT is a rollup/display flag —
         Sonarr's actual search logic checks each *episode's* own 'monitored' flag, which
         the series PUT doesn't reliably cascade down to. So episode monitoring is set
-        explicitly too, and the search is triggered per-season (SeasonSearch) rather than
-        a general SeriesSearch, to make sure something concrete actually gets searched."""
+        explicitly too, via Sonarr's direct bulk episode-monitor endpoint, and the search
+        is triggered per-season (SeasonSearch) rather than a general SeriesSearch, to make
+        sure something concrete actually gets searched. Episode *records* for a newly
+        created series are populated by an async refresh job rather than existing the
+        instant the add call returns, so fetching them is retried briefly (see
+        _wait_for_episodes) instead of assuming a single fetch will see them."""
         if result.already_added:
             return False, 'Already in Sonarr.'
         try:
@@ -92,7 +109,11 @@ class SonarrClient(ArrClient):
         try:
             await self._put(f'/api/v3/series/{series_id}', created)
 
-            episodes = await self._get('/api/v3/episode', params={'seriesId': series_id})
+            episodes = await self._wait_for_episodes(series_id)
+            if not episodes:
+                log.error(f'Sonarr never populated episodes for series {series_id} — episode monitoring not set')
+                return False, 'Added, but Sonarr never populated its episode list in time — try again shortly.'
+
             episode_ids = [
                 e['id'] for e in episodes
                 if wanted is None or e.get('seasonNumber') in wanted
