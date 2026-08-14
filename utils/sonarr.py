@@ -55,7 +55,13 @@ class SonarrClient(ArrClient):
         value ('all'/'none'/etc.) overrides whatever 'monitored' flags are sent on the
         `seasons` array at creation time rather than respecting them, so a custom season
         selection has to be applied as a separate update after the series exists (the
-        same two-step process Sonarr's own "Season Pass" UI uses)."""
+        same two-step process Sonarr's own "Season Pass" UI uses).
+
+        The season-level 'monitored' flag set via that PUT is a rollup/display flag —
+        Sonarr's actual search logic checks each *episode's* own 'monitored' flag, which
+        the series PUT doesn't reliably cascade down to. So episode monitoring is set
+        explicitly too, and the search is triggered per-season (SeasonSearch) rather than
+        a general SeriesSearch, to make sure something concrete actually gets searched."""
         if result.already_added:
             return False, 'Already in Sonarr.'
         try:
@@ -85,7 +91,20 @@ class SonarrClient(ArrClient):
         series_id = created.get('id')
         try:
             await self._put(f'/api/v3/series/{series_id}', created)
-            await self._post('/api/v3/command', {'name': 'SeriesSearch', 'seriesId': series_id})
+
+            episodes = await self._get('/api/v3/episode', params={'seriesId': series_id})
+            episode_ids = [
+                e['id'] for e in episodes
+                if wanted is None or e.get('seasonNumber') in wanted
+            ]
+            if episode_ids:
+                await self._put('/api/v3/episode/monitor', {'episodeIds': episode_ids, 'monitored': True})
+
+            season_numbers = wanted if wanted is not None else {
+                s.get('seasonNumber') for s in created.get('seasons', []) if s.get('seasonNumber') is not None
+            }
+            for n in season_numbers:
+                await self._post('/api/v3/command', {'name': 'SeasonSearch', 'seriesId': series_id, 'seasonNumber': n})
         except Exception as exc:
             log.error(f'Series added to Sonarr but failed to set season monitoring: {exc}')
             return False, f'Added, but failed to set season monitoring: {exc}'
